@@ -1,0 +1,40 @@
+{
+  "name": "agenttrail",
+  "version": "0.1.0",
+  "description": "Local-first dashboard that shows what your Claude Code agents did: sessions, conversations, files touched, diffs and search.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agenttrail": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "web/dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && npm --prefix web run build",
+    "build:cli": "tsc -p tsconfig.json",
+    "build:web": "npm --prefix web run build",
+    "dev:web": "npm --prefix web run dev",
+    "start": "node dist/cli.js",
+    "test": "tsc -p tsconfig.test.json && node --test .test-build/test/",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "ai-agents",
+    "transcripts",
+    "dashboard",
+    "developer-tools",
+    "local-first"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

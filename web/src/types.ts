@@ -14,6 +14,18 @@ export interface TokenUsage {
   cacheCreation: number;
 }
 
+export type ToolCategory = 'edit' | 'command' | 'read' | 'search' | 'task';
+
+export interface ToolTally {
+  edit: number;
+  command: number;
+  read: number;
+  search: number;
+  task: number;
+  errors: number;
+  total: number;
+}
+
 export interface SessionSummary {
   id: string;
   projectPath: string;
@@ -25,6 +37,7 @@ export interface SessionSummary {
   models: string[];
   tokens: TokenUsage | null;
   filesTouched: FileEdit[];
+  tools: ToolTally;
   firstUserMessage: string | null;
   mtime: number;
 }

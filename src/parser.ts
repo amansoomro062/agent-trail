@@ -47,8 +47,10 @@ import type {
   SessionDetail,
   SessionSummary,
   TokenUsage,
+  ToolCategory,
   ToolEvent,
   ToolResult,
+  ToolTally,
 } from './types.js';
 
 /** Max chars kept for a tool_result preview. */
@@ -163,6 +165,34 @@ function fileOperation(name: string): FileEdit['operation'] | null {
   }
 }
 
+/**
+ * Bucket a tool name into one of the five dashboard categories.
+ * Anything unrecognized falls into 'task' rather than growing a sixth slot -
+ * see TOOL_CATEGORIES in types.ts for why the set stays small.
+ */
+export function toolCategory(name: string): ToolCategory {
+  switch (name) {
+    case 'Write':
+    case 'Edit':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+      return 'edit';
+    case 'Bash':
+    case 'BashOutput':
+    case 'KillShell':
+      return 'command';
+    case 'Read':
+      return 'read';
+    case 'Grep':
+    case 'Glob':
+    case 'WebSearch':
+    case 'WebFetch':
+      return 'search';
+    default:
+      return 'task';
+  }
+}
+
 interface FileTouch {
   created: number;
   edited: number;
@@ -180,6 +210,7 @@ class SessionBuilder {
   messageCount = 0;
   models = new Set<string>();
   files = new Map<string, FileTouch>();
+  tools: ToolTally = { edit: 0, command: 0, read: 0, search: 0, task: 0, errors: 0, total: 0 };
   firstUserMessage: string | null = null;
   /** usage per unique assistant message.id (dedup of streaming chunks). */
   private usageByMessageId = new Map<string, TokenUsage>();
@@ -295,6 +326,8 @@ class SessionBuilder {
             };
             if (tool.filePath) this.touchFile(tool.filePath, block.name);
             if (tool.id) this.toolUseById.set(tool.id, tool);
+            this.tools[toolCategory(block.name)] += 1;
+            this.tools.total += 1;
             msg.toolUses.push(tool);
           }
           // thinking blocks are intentionally skipped
@@ -321,6 +354,7 @@ class SessionBuilder {
             const preview = truncate(toolResultText(block.content), TOOL_RESULT_PREVIEW);
             const isError = block.is_error === true;
             toolResults.push({ toolUseId, isError, preview });
+            if (isError) this.tools.errors += 1;
             // fold the result back into its tool_use for compact rendering
             const tool = this.toolUseById.get(toolUseId);
             if (tool) {
@@ -403,6 +437,7 @@ class SessionBuilder {
       models: [...this.models].sort(),
       tokens: this.totalTokens(),
       filesTouched: this.filesTouched(),
+      tools: { ...this.tools },
       firstUserMessage: this.firstUserMessage,
       mtime,
     };

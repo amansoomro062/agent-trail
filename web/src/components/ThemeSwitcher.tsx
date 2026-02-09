@@ -30,7 +30,7 @@ export default function ThemeSwitcher() {
       onClick={toggle}
       aria-label={label}
       title={label}
-      className="flex h-7 w-7 items-center justify-center rounded-md border border-hairline text-ink-subtle transition-colors duration-150 ease-out hover:bg-surface-2 hover:text-ink"
+      className="flex h-7 w-7 items-center justify-center rounded-md border border-line text-ink-2 transition-colors duration-150 ease-out hover:bg-sunken hover:text-ink"
     >
       {theme === 'dark' ? (
         // moon

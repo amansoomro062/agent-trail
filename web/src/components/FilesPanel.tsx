@@ -1,43 +1,27 @@
 import { useState } from 'react';
 import type { FileEdit } from '../types';
 import { basename, dirname } from '../format';
+import { categoryColor } from '../viz';
 
 /**
- * Operations are ranked by ink weight, never by hue - mutations read
- * brightest, reads recede. See DESIGN.md § "Tool categories are NOT
- * color-coded".
+ * Operations reuse the categorical slots they correspond to - writes and edits
+ * are the 'edit' hue, reads the 'read' hue - so a file row and a tool row for
+ * the same action agree on color.
  */
-const OP: Record<FileEdit['operation'], { label: string; chip: string; path: string }> = {
-  created: {
-    label: 'New',
-    chip: 'border-hairline-strong bg-surface-3 text-ink',
-    path: 'text-ink-muted',
-  },
-  edited: {
-    label: 'Edit',
-    chip: 'border-hairline-strong bg-surface-2 text-ink-muted',
-    path: 'text-ink-muted',
-  },
-  read: {
-    label: 'Read',
-    chip: 'border-hairline bg-surface-1 text-ink-tertiary',
-    path: 'text-ink-subtle',
-  },
+const OP: Record<FileEdit['operation'], { label: string; color: string }> = {
+  created: { label: 'New', color: categoryColor('edit') },
+  edited: { label: 'Edit', color: categoryColor('edit') },
+  read: { label: 'Read', color: categoryColor('read') },
 };
 
-interface Props {
-  files: FileEdit[];
-}
-
-/** Collapsible list of every file the agent touched this session. */
-export default function FilesPanel({ files }: Props) {
+export default function FilesPanel({ files }: { files: FileEdit[] }) {
   const [open, setOpen] = useState(false);
-
   if (files.length === 0) return null;
 
   const created = files.filter((f) => f.operation === 'created').length;
   const edited = files.filter((f) => f.operation === 'edited').length;
   const read = files.filter((f) => f.operation === 'read').length;
+  const maxCount = Math.max(...files.map((f) => f.count), 1);
 
   const counts = [
     created > 0 && `${created} new`,
@@ -46,53 +30,59 @@ export default function FilesPanel({ files }: Props) {
   ].filter(Boolean) as string[];
 
   return (
-    <section className="border-b border-hairline bg-surface-1">
+    <section className="card overflow-hidden">
       <button
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors duration-150 ease-out hover:bg-surface-2"
+        className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors duration-150 hover:bg-card-2"
       >
         <svg
           viewBox="0 0 12 12"
           fill="none"
-          className={`h-2.5 w-2.5 shrink-0 text-ink-tertiary transition-transform duration-150 ease-out ${
+          className={`h-2.5 w-2.5 shrink-0 text-ink-3 transition-transform duration-150 ${
             open ? 'rotate-90' : ''
           }`}
           aria-hidden="true"
         >
           <path d="m4 2 4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span className="eyebrow">Files</span>
-        <span className="num text-[13px] text-ink">{files.length}</span>
-        <span className="num text-[12px] text-ink-tertiary">{counts.join(' · ')}</span>
+        <h2 className="text-[13px] font-semibold text-ink">Files touched</h2>
+        <span className="num rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-ink-2">
+          {files.length}
+        </span>
+        <span className="num text-[12px] text-ink-3">{counts.join(' · ')}</span>
       </button>
 
       {open && (
-        /* capped so a 200-file session can't push the transcript off-screen */
-        <div className="grid max-h-72 grid-cols-1 overflow-y-auto border-t border-hairline xl:grid-cols-2">
+        <div className="max-h-80 overflow-y-auto border-t border-line">
           {files.map((f) => {
             const op = OP[f.operation];
-            const dir = dirname(f.path);
             return (
               <div
                 key={f.path}
-                className="flex items-center gap-2.5 border-b border-hairline px-4 py-1.5 transition-colors duration-150 ease-out hover:bg-surface-2 xl:odd:border-r"
+                className="flex items-center gap-3 border-b border-line px-4 py-2 last:border-b-0 hover:bg-card-2"
                 title={f.path}
               >
                 <span
-                  className={`shrink-0 rounded border px-1.5 py-px text-[10px] font-medium ${op.chip}`}
+                  className="w-11 shrink-0 rounded px-1.5 py-px text-center text-[10px] font-semibold text-white"
+                  style={{ background: op.color }}
                 >
                   {op.label}
                 </span>
-                <span className={`mono min-w-0 truncate text-[12px] ${op.path}`}>
-                  <span className="text-ink-tertiary">{dir}</span>
+                <span className="mono min-w-0 flex-1 truncate text-[12px] text-ink-2">
+                  <span className="text-ink-3">{dirname(f.path)}</span>
                   {basename(f.path)}
                 </span>
-                {f.count > 1 && (
-                  <span className="num mono ml-auto shrink-0 text-[11px] text-ink-tertiary">
-                    ×{f.count}
+                {/* touch count as a small bar, so hot files stand out */}
+                <span className="flex w-24 shrink-0 items-center gap-2">
+                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken">
+                    <span
+                      className="block h-full rounded-full"
+                      style={{ width: `${(f.count / maxCount) * 100}%`, background: op.color }}
+                    />
                   </span>
-                )}
+                  <span className="num w-5 text-right text-[11px] text-ink-3">{f.count}</span>
+                </span>
               </div>
             );
           })}

@@ -92,7 +92,7 @@ export default function SearchBar({ onJump }: Props) {
       <svg
         viewBox="0 0 16 16"
         fill="none"
-        className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-tertiary"
+        className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-3"
         aria-hidden="true"
       >
         <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
@@ -109,7 +109,7 @@ export default function SearchBar({ onJump }: Props) {
         onKeyDown={onInputKey}
         placeholder="Search all sessions"
         aria-label="Search all sessions"
-        className="w-full rounded-md border border-hairline bg-surface-2 py-1.5 pl-8 pr-16 text-[13px] text-ink placeholder-ink-tertiary outline-none transition-colors duration-150 ease-out focus:border-hairline-strong focus:bg-surface-3"
+        className="w-full rounded-lg border border-line bg-sunken py-1.5 pl-8 pr-16 text-[13px] text-ink placeholder-ink-3 outline-none transition-colors duration-150 ease-out focus:border-line-strong focus:bg-card"
       />
       <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
         <span className="kbd">⌘</span>
@@ -119,15 +119,15 @@ export default function SearchBar({ onJump }: Props) {
       {showPanel && (
         <div
           role="listbox"
-          className="pop pop-open absolute left-0 right-0 top-full z-30 mt-1.5 max-h-96 overflow-y-auto rounded-lg border border-hairline-strong bg-surface-2"
+          className="pop-open absolute left-0 right-0 top-full z-30 mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-line-strong bg-card shadow-[var(--shadow-lg)]"
         >
-          <div className="sticky top-0 border-b border-hairline bg-surface-2 px-3 py-1.5">
+          <div className="sticky top-0 border-b border-line bg-card px-3 py-1.5">
             <span className="eyebrow">
               {searching ? 'Searching…' : `${results.length} result${results.length === 1 ? '' : 's'}`}
             </span>
           </div>
           {!searching && results.length === 0 && (
-            <p className="px-3 py-2.5 text-[13px] text-ink-tertiary">No matches.</p>
+            <p className="px-3 py-2.5 text-[13px] text-ink-3">No matches.</p>
           )}
           {results.map((hit, i) => (
             <button
@@ -136,13 +136,13 @@ export default function SearchBar({ onJump }: Props) {
               aria-selected={i === cursor}
               onClick={() => jump(hit)}
               onMouseEnter={() => setCursor(i)}
-              className={`relative block w-full border-b border-hairline px-3 py-2 text-left transition-colors duration-150 ease-out last:border-0 ${
-                i === cursor ? 'bg-surface-3' : ''
+              className={`relative block w-full border-b border-line px-3 py-2 text-left transition-colors duration-150 ease-out last:border-0 ${
+                i === cursor ? 'bg-sunken' : ''
               }`}
             >
-              {/* the active row carries the same accent rail as a selected session */}
+              {/* the active row carries the same brand rail as a selected session */}
               {i === cursor && (
-                <span className="absolute inset-y-0 left-0 w-[2px] bg-accent" aria-hidden="true" />
+                <span className="absolute inset-y-0 left-0 w-[2px] bg-brand" aria-hidden="true" />
               )}
               <div className="flex items-baseline justify-between gap-2">
                 <span className="flex min-w-0 items-baseline gap-2">
@@ -152,15 +152,15 @@ export default function SearchBar({ onJump }: Props) {
                   >
                     {hit.projectName}
                   </span>
-                  <span className="shrink-0 text-[11px] text-ink-tertiary">
+                  <span className="shrink-0 text-[11px] text-ink-3">
                     {ROLE_LABEL[hit.role]}
                   </span>
                 </span>
-                <span className="num shrink-0 text-[11px] text-ink-tertiary">
+                <span className="num shrink-0 text-[11px] text-ink-3">
                   {shortDate(hit.timestamp)}
                 </span>
               </div>
-              <p className="mono mt-1 line-clamp-2 break-all text-[11px] leading-relaxed text-ink-subtle">
+              <p className="mono mt-1 line-clamp-2 break-all text-[11px] leading-relaxed text-ink-2">
                 {hit.snippet}
               </p>
             </button>

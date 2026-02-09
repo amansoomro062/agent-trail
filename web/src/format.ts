@@ -18,6 +18,7 @@ export function relativeTime(iso: string | null): string {
 }
 
 export function formatTokens(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
   return String(n);
@@ -26,6 +27,16 @@ export function formatTokens(n: number): string {
 export function basename(p: string): string {
   const parts = p.split('/').filter(Boolean);
   return parts[parts.length - 1] ?? p;
+}
+
+/**
+ * Trailing path segments, e.g. "spec/index.ts". A bare basename is ambiguous -
+ * every project has an index.ts - so lists that rank files across projects show
+ * enough of the tail to tell them apart.
+ */
+export function shortPath(p: string, segments = 2): string {
+  const parts = p.split('/').filter(Boolean);
+  return parts.slice(-segments).join('/');
 }
 
 /** Directory portion of a path, without the trailing basename. */

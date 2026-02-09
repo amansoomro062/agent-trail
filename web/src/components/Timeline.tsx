@@ -3,45 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Message, ToolEvent, ToolResult } from '../types';
 import { basename, clockTime, dirname, shortModel } from '../format';
-import ToolIcon, { toolKind } from './ToolIcon';
-
-/* ------------------------------------------------------------------
-   Tool rows. Hierarchy comes from surface level + ink weight, never
-   from hue - the single exception is an errored call. See DESIGN.md.
-   ------------------------------------------------------------------ */
-
-type Tier = 'mutate' | 'run' | 'inspect' | 'error';
-
-function tierOf(tool: ToolEvent): Tier {
-  if (tool.isError) return 'error';
-  const kind = toolKind(tool.name);
-  if (kind === 'write' || kind === 'edit') return 'mutate';
-  if (kind === 'bash' || kind === 'task') return 'run';
-  return 'inspect';
-}
-
-const TIER: Record<Tier, { chip: string; name: string; target: string }> = {
-  mutate: {
-    chip: 'border-hairline-strong bg-surface-3 text-ink',
-    name: 'text-ink',
-    target: 'text-ink-muted',
-  },
-  run: {
-    chip: 'border-hairline bg-surface-2 text-ink-muted',
-    name: 'text-ink-muted',
-    target: 'text-ink-subtle',
-  },
-  inspect: {
-    chip: 'border-hairline bg-surface-1 text-ink-tertiary',
-    name: 'text-ink-subtle',
-    target: 'text-ink-tertiary',
-  },
-  error: {
-    chip: 'border-[var(--error-line)] bg-[var(--error-bg)] text-error',
-    name: 'text-error',
-    target: 'text-ink-muted',
-  },
-};
+import { CATEGORY, categoryColor, toolCategory } from '../viz';
+import ToolIcon from './ToolIcon';
 
 function Chevron({ open, className = '' }: { open: boolean; className?: string }) {
   return (
@@ -58,43 +21,53 @@ function Chevron({ open, className = '' }: { open: boolean; className?: string }
   );
 }
 
-/** One tool call: icon · name · target, expandable to its result. */
+/* ------------------------------------------------------------------ tools */
+
+/** One tool call. The icon chip carries the category color; text stays ink. */
 function ToolCall({ tool }: { tool: ToolEvent }) {
   const [expanded, setExpanded] = useState(false);
   const target = tool.filePath ?? tool.summary ?? '';
   const hasResult = Boolean(tool.resultPreview);
-  const t = TIER[tierOf(tool)];
-  const isPath = Boolean(tool.filePath);
+  const cat = toolCategory(tool.name);
+  const failed = tool.isError === true;
 
   return (
-    <div className="border-b border-hairline last:border-b-0">
+    <div className="border-b border-line last:border-b-0">
       <button
         onClick={() => hasResult && setExpanded((v) => !v)}
         aria-expanded={hasResult ? expanded : undefined}
-        className={`flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors duration-150 ease-out ${
-          hasResult ? 'cursor-pointer hover:bg-surface-2' : 'cursor-default'
+        className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-150 ${
+          hasResult ? 'cursor-pointer hover:bg-card-2' : 'cursor-default'
         }`}
       >
         <span
-          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border ${t.chip}`}
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white"
+          style={{ background: failed ? 'var(--danger)' : categoryColor(cat) }}
         >
-          <ToolIcon kind={toolKind(tool.name)} />
+          <ToolIcon name={tool.name} />
         </span>
-        <span className={`shrink-0 text-[12px] font-medium ${t.name}`}>{tool.name}</span>
-        <span className={`mono min-w-0 truncate text-[12px] ${t.target}`}>
-          {isPath ? (
+        <span className={`shrink-0 text-[12px] font-medium ${failed ? 'text-danger' : 'text-ink'}`}>
+          {tool.name}
+        </span>
+        <span className="mono min-w-0 truncate text-[12px] text-ink-2">
+          {tool.filePath ? (
             <>
-              <span className="text-ink-tertiary">{dirname(target)}</span>
+              <span className="text-ink-3">{dirname(target)}</span>
               {basename(target)}
             </>
           ) : (
             target
           )}
         </span>
-        {hasResult && <Chevron open={expanded} className="ml-auto text-ink-tertiary" />}
+        {failed && (
+          <span className="shrink-0 rounded border border-danger-line bg-danger-wash px-1.5 py-px text-[11px] font-medium text-danger">
+            failed
+          </span>
+        )}
+        {hasResult && <Chevron open={expanded} className="ml-auto text-ink-3" />}
       </button>
       {expanded && tool.resultPreview && (
-        <pre className="mono pop-open max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-hairline bg-canvas px-3 py-2 text-[11px] leading-relaxed text-ink-subtle">
+        <pre className="mono pop-open max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-line bg-sunken px-3 py-2 text-[11px] leading-relaxed text-ink-2">
           {tool.resultPreview}
         </pre>
       )}
@@ -102,23 +75,22 @@ function ToolCall({ tool }: { tool: ToolEvent }) {
   );
 }
 
-/** An orphaned tool_result - one whose tool_use never appeared in the transcript. */
 function OrphanResult({ result }: { result: ToolResult }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="border-b border-hairline last:border-b-0">
+    <div className="border-b border-line last:border-b-0">
       <button
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors duration-150 ease-out hover:bg-surface-2"
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-150 hover:bg-card-2"
       >
-        <Chevron open={expanded} className="text-ink-tertiary" />
-        <span className={`text-[12px] ${result.isError ? 'text-error' : 'text-ink-subtle'}`}>
+        <Chevron open={expanded} className="text-ink-3" />
+        <span className={`text-[12px] ${result.isError ? 'text-danger' : 'text-ink-2'}`}>
           {result.isError ? 'Tool error' : 'Tool result'}
         </span>
       </button>
       {expanded && (
-        <pre className="mono pop-open max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-hairline bg-canvas px-3 py-2 text-[11px] leading-relaxed text-ink-subtle">
+        <pre className="mono pop-open max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-line bg-sunken px-3 py-2 text-[11px] leading-relaxed text-ink-2">
           {result.preview}
         </pre>
       )}
@@ -126,29 +98,12 @@ function OrphanResult({ result }: { result: ToolResult }) {
   );
 }
 
-/** Bordered container that holds a run of tool rows. */
-function ToolList({ tools, results }: { tools: ToolEvent[]; results: ToolResult[] }) {
-  if (tools.length === 0 && results.length === 0) return null;
-  return (
-    <div className="overflow-hidden rounded-lg border border-hairline bg-surface-1">
-      {tools.map((t, i) => (
-        <ToolCall key={t.id || `${t.name}-${i}`} tool={t} />
-      ))}
-      {results.map((r, i) => (
-        <OrphanResult key={r.toolUseId || `orphan-${i}`} result={r} />
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------
-   Grouping: consecutive text-free tool messages collapse into one
-   foldable run, so a 40-call stretch doesn't bury the conversation.
-   ------------------------------------------------------------------ */
+/* --------------------------------------------------------------- grouping */
 
 interface ToolRun {
   tools: ToolEvent[];
   results: ToolResult[];
+  uuids: string[];
   start: string;
   end: string;
   errors: number;
@@ -161,6 +116,7 @@ function groupMessages(messages: Message[]): Block[] {
   const blocks: Block[] = [];
   let tools: ToolEvent[] = [];
   let results: ToolResult[] = [];
+  let uuids: string[] = [];
   let first: Message | null = null;
   let last: Message | null = null;
 
@@ -171,14 +127,15 @@ function groupMessages(messages: Message[]): Block[] {
       run: {
         tools,
         results,
+        uuids,
         start: first.timestamp,
         end: (last ?? first).timestamp,
-        errors:
-          tools.filter((t) => t.isError).length + results.filter((r) => r.isError).length,
+        errors: tools.filter((t) => t.isError).length + results.filter((r) => r.isError).length,
       },
     });
     tools = [];
     results = [];
+    uuids = [];
     first = null;
     last = null;
   };
@@ -187,10 +144,12 @@ function groupMessages(messages: Message[]): Block[] {
     if (isQuiet(m) && m.toolUses.length > 0) {
       first ??= m;
       last = m;
+      uuids.push(m.uuid);
       tools.push(...m.toolUses);
       results.push(...m.toolResults);
     } else if (isQuiet(m) && m.toolResults.length > 0 && first) {
       last = m;
+      uuids.push(m.uuid);
       results.push(...m.toolResults);
     } else {
       flush();
@@ -201,153 +160,177 @@ function groupMessages(messages: Message[]): Block[] {
   return blocks;
 }
 
-/** Summarize a run as plain counts: "6 edits · 3 commands · 12 reads". */
+/** Counts by category, e.g. "3 edits · 1 command". */
 function describeRun(run: ToolRun): string {
-  const n = (pred: (t: ToolEvent) => boolean) => run.tools.filter(pred).length;
-  const mutations = n((t) => ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(t.name));
-  const commands = n((t) => t.name === 'Bash');
-  const searches = n((t) => ['Grep', 'Glob', 'WebSearch', 'WebFetch'].includes(t.name));
-  const reads = n((t) => t.name === 'Read');
-  const tasks = n((t) => ['Task', 'Agent', 'Skill'].includes(t.name));
-  const other = run.tools.length - mutations - commands - searches - reads - tasks;
-
-  const plural = (c: number, one: string, many: string) => `${c} ${c === 1 ? one : many}`;
-  const parts = [
-    mutations && plural(mutations, 'edit', 'edits'),
-    commands && plural(commands, 'command', 'commands'),
-    searches && plural(searches, 'search', 'searches'),
-    reads && plural(reads, 'read', 'reads'),
-    tasks && plural(tasks, 'task', 'tasks'),
-    other && plural(other, 'call', 'calls'),
-  ].filter(Boolean) as string[];
-
-  return parts.join(' · ') || 'no calls';
+  const counts = new Map<string, number>();
+  for (const t of run.tools) {
+    const c = toolCategory(t.name);
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([c, n]) => `${n} ${n === 1 ? CATEGORY[c as keyof typeof CATEGORY].one : CATEGORY[c as keyof typeof CATEGORY].label}`)
+    .join(' · ');
 }
 
-/** A collapsed run of tool calls. */
-function ToolRunBlock({ run }: { run: ToolRun }) {
-  const [expanded, setExpanded] = useState(false);
-  const startFmt = clockTime(run.start);
-  const endFmt = clockTime(run.end);
+/* -------------------------------------------------------------- the spine */
 
-  // A single call with no result is clearer shown outright than folded.
-  if (run.tools.length === 1 && run.results.length === 0) {
-    return (
-      <div className="flex gap-3 py-1.5">
-        <span className="num mono w-10 shrink-0 pt-1.5 text-right text-[11px] text-ink-tertiary">
-          {startFmt}
-        </span>
-        <div className="min-w-0 max-w-3xl flex-1">
-          <ToolList tools={run.tools} results={[]} />
-        </div>
-      </div>
-    );
-  }
-
+/** A node on the rail. Everything in the timeline hangs off one of these. */
+function SpineRow({
+  time,
+  node,
+  children,
+  anchors = [],
+}: {
+  time: string;
+  node: React.ReactNode;
+  children: React.ReactNode;
+  anchors?: string[];
+}) {
   return (
-    <div className="flex gap-3 py-1.5">
-      <span className="num mono w-10 shrink-0 pt-2 text-right text-[11px] text-ink-tertiary">
-        {startFmt}
+    <div className="relative flex gap-3 py-2.5">
+      {anchors.map((id) => (
+        <span key={id} id={`ev-${id}`} className="absolute -top-16" aria-hidden="true" />
+      ))}
+      {/* the rail itself */}
+      <span
+        className="absolute bottom-0 left-[43px] top-0 w-px bg-line"
+        aria-hidden="true"
+      />
+      <span className="num mono w-9 shrink-0 pt-1 text-right text-[11px] text-ink-3">{time}</span>
+      <span className="relative z-10 flex h-5 w-5 shrink-0 items-center justify-center pt-0">
+        {node}
       </span>
-      <div className="min-w-0 max-w-3xl flex-1">
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          aria-expanded={expanded}
-          className={`flex w-full items-center gap-2.5 border border-hairline bg-surface-1 px-2.5 py-1.5 text-left transition-colors duration-150 ease-out hover:bg-surface-2 ${
-            expanded ? 'rounded-t-lg border-b-0' : 'rounded-lg'
-          }`}
-        >
-          <Chevron open={expanded} className="text-ink-tertiary" />
-          <span className="text-[12px] font-medium text-ink-muted">
-            {run.tools.length} tool {run.tools.length === 1 ? 'call' : 'calls'}
-          </span>
-          <span className="num truncate text-[12px] text-ink-tertiary">{describeRun(run)}</span>
-          {run.errors > 0 && (
-            <span className="num shrink-0 rounded border border-[var(--error-line)] bg-[var(--error-bg)] px-1.5 py-px text-[11px] font-medium text-error">
-              {run.errors} failed
-            </span>
-          )}
-          {endFmt !== startFmt && (
-            <span className="num mono ml-auto shrink-0 text-[11px] text-ink-tertiary">
-              → {endFmt}
-            </span>
-          )}
-        </button>
-        {expanded && (
-          <div className="pop-open overflow-hidden rounded-b-lg border border-hairline bg-surface-1">
-            {run.tools.map((t, i) => (
-              <ToolCall key={t.id || `${t.name}-${i}`} tool={t} />
-            ))}
-            {run.results.map((r, i) => (
-              <OrphanResult key={r.toolUseId || `orphan-${i}`} result={r} />
-            ))}
-          </div>
-        )}
-      </div>
+      <div className="min-w-0 flex-1 pb-0.5">{children}</div>
     </div>
   );
 }
-
-/* ------------------------------------------------------------------
-   Message rows
-   ------------------------------------------------------------------ */
 
 function MessageRow({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user';
   const text = msg.texts.join('\n\n').trim();
   const hasTools = msg.toolUses.length > 0 || msg.toolResults.length > 0;
 
+  const node = isUser ? (
+    <span className="h-2.5 w-2.5 rounded-full bg-brand ring-4 ring-card" aria-hidden="true" />
+  ) : (
+    <span
+      className="h-2 w-2 rounded-full bg-ink-3 ring-4 ring-card"
+      aria-hidden="true"
+    />
+  );
+
   return (
-    <div className="flex gap-3 py-2.5">
-      <span className="num mono w-10 shrink-0 pt-0.5 text-right text-[11px] text-ink-tertiary">
-        {clockTime(msg.timestamp)}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-baseline gap-2">
-          <span className={`text-[12px] font-medium ${isUser ? 'text-ink' : 'text-ink-subtle'}`}>
-            {isUser ? 'You' : msg.model ? shortModel(msg.model) : 'Assistant'}
+    <SpineRow time={clockTime(msg.timestamp)} node={node} anchors={[msg.uuid]}>
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className={`text-[12px] font-semibold ${isUser ? 'text-brand-text' : 'text-ink-2'}`}>
+          {isUser ? 'You' : msg.model ? shortModel(msg.model) : 'Assistant'}
+        </span>
+        {msg.isSidechain && (
+          <span className="rounded border border-line px-1.5 py-px text-[11px] text-ink-3">
+            subagent
           </span>
-          {msg.isSidechain && (
-            <span className="rounded border border-hairline px-1.5 py-px text-[11px] text-ink-tertiary">
-              subagent
-            </span>
-          )}
-        </div>
-
-        {text &&
-          (isUser ? (
-            /* user turns are the anchors you scan for - lift them one step */
-            <div className="max-w-3xl whitespace-pre-wrap break-words rounded-lg border border-hairline bg-surface-1 px-3 py-2 text-[14px] leading-[1.6] text-ink">
-              {text}
-            </div>
-          ) : (
-            <div className="md max-w-3xl break-words text-[14px] leading-[1.6] text-ink-muted">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
-            </div>
-          ))}
-
-        {hasTools && (
-          <div className={`max-w-3xl ${text ? 'mt-2' : ''}`}>
-            <ToolList tools={msg.toolUses} results={msg.toolResults} />
-          </div>
         )}
       </div>
-    </div>
+
+      {text &&
+        (isUser ? (
+          <div className="whitespace-pre-wrap break-words rounded-lg border border-brand/25 bg-brand-wash px-3 py-2 text-[14px] leading-[1.6] text-ink">
+            {text}
+          </div>
+        ) : (
+          <div className="md break-words text-[14px] leading-[1.6] text-ink-2">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+          </div>
+        ))}
+
+      {hasTools && (
+        <div className={`overflow-hidden rounded-lg border border-line ${text ? 'mt-2' : ''}`}>
+          {msg.toolUses.map((t, i) => (
+            <ToolCall key={t.id || `${msg.uuid}-${i}`} tool={t} />
+          ))}
+          {msg.toolResults.map((r, i) => (
+            <OrphanResult key={r.toolUseId || `o-${i}`} result={r} />
+          ))}
+        </div>
+      )}
+    </SpineRow>
   );
 }
 
-interface Props {
-  messages: Message[];
+function ToolRunBlock({ run }: { run: ToolRun }) {
+  const [expanded, setExpanded] = useState(false);
+  const startFmt = clockTime(run.start);
+  const endFmt = clockTime(run.end);
+
+  // a cluster of category dots stands in for the run while collapsed
+  const dots = run.tools.slice(0, 12);
+
+  return (
+    <SpineRow
+      time={startFmt}
+      anchors={run.uuids}
+      node={
+        <span
+          className="flex h-4 w-4 items-center justify-center rounded-[5px] border border-line bg-card ring-4 ring-card"
+          aria-hidden="true"
+        >
+          <span className="h-1.5 w-1.5 rounded-[2px] bg-ink-3" />
+        </span>
+      }
+    >
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className={`flex w-full items-center gap-2.5 border border-line bg-card px-3 py-1.5 text-left transition-colors duration-150 hover:bg-card-2 ${
+          expanded ? 'rounded-t-lg border-b-0' : 'rounded-lg'
+        }`}
+      >
+        <Chevron open={expanded} className="text-ink-3" />
+        <span className="flex shrink-0 items-center gap-[3px]" aria-hidden="true">
+          {dots.map((t, i) => (
+            <span
+              key={i}
+              className="h-3 w-[5px] rounded-[2px]"
+              style={{
+                background: t.isError ? 'var(--danger)' : categoryColor(toolCategory(t.name)),
+              }}
+            />
+          ))}
+          {run.tools.length > dots.length && (
+            <span className="ml-0.5 text-[11px] text-ink-3">+{run.tools.length - dots.length}</span>
+          )}
+        </span>
+        <span className="truncate text-[12px] text-ink-2">{describeRun(run)}</span>
+        {run.errors > 0 && (
+          <span className="num shrink-0 rounded border border-danger-line bg-danger-wash px-1.5 py-px text-[11px] font-medium text-danger">
+            {run.errors} failed
+          </span>
+        )}
+        {endFmt !== startFmt && (
+          <span className="num mono ml-auto shrink-0 text-[11px] text-ink-3">→ {endFmt}</span>
+        )}
+      </button>
+      {expanded && (
+        <div className="pop-open overflow-hidden rounded-b-lg border border-line">
+          {run.tools.map((t, i) => (
+            <ToolCall key={t.id || `${i}`} tool={t} />
+          ))}
+          {run.results.map((r, i) => (
+            <OrphanResult key={r.toolUseId || `o-${i}`} result={r} />
+          ))}
+        </div>
+      )}
+    </SpineRow>
+  );
 }
 
-/** The conversation timeline for the selected session. */
-export default function Timeline({ messages }: Props) {
+export default function Timeline({ messages }: { messages: Message[] }) {
   if (messages.length === 0) {
-    return <p className="px-6 py-5 text-[13px] text-ink-tertiary">No messages in this session.</p>;
+    return <p className="px-4 py-5 text-[13px] text-ink-3">No messages in this session.</p>;
   }
   const blocks = groupMessages(messages);
   return (
-    <div className="divide-y divide-hairline px-5 py-2">
+    <div className="px-4 py-2">
       {blocks.map((b, i) =>
         b.kind === 'message' ? (
           <MessageRow key={b.msg.uuid} msg={b.msg} />

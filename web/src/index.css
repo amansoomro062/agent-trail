@@ -1,105 +1,132 @@
 @import "@fontsource/inter/400.css";
 @import "@fontsource/inter/500.css";
 @import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 @import "tailwindcss";
 
 /* ============================================================
    agenttrail - see DESIGN.md
-   Derived from Linear's system: near-black canvas, four-step
-   surface ladder, hairline borders, one chromatic accent.
+   Light-first product UI: grey page plane, white cards with real
+   elevation, one brand accent, and a validated categorical palette
+   for tool activity.
    ============================================================ */
 
-/* ---------- dark (canonical) ---------- */
 :root,
-[data-theme="dark"] {
-  --canvas: #010102;
-  --surface-1: #0f1011;
-  --surface-2: #141516;
-  --surface-3: #18191a;
-  --hairline: #23252a;
-  --hairline-strong: #34343a;
-
-  --ink: #f7f8f8;
-  --ink-muted: #d0d6e0;
-  --ink-subtle: #8a8f98;
-  --ink-tertiary: #62666d;
-
-  --accent: #5e6ad2;
-  --accent-hover: #828fff;
-  /* accent rendered as small text - must clear 4.5:1 on this canvas */
-  --accent-text: #828fff;
-  --on-accent: #ffffff;
-
-  --error: #eb5757;
-  --success: #27a644;
-
-  --shadow-pop:
-    0 2px 4px rgb(0 0 0 / 0.4),
-    0 16px 40px -12px rgb(0 0 0 / 0.65);
-  color-scheme: dark;
-}
-
-/* ---------- light (derived - Linear's product light mode) ---------- */
 [data-theme="light"] {
-  --canvas: #fcfcfd;
-  --surface-1: #f7f8f9;
-  --surface-2: #f1f2f4;
-  --surface-3: #eaebee;
-  --hairline: #e5e6e9;
-  --hairline-strong: #d3d5da;
+  --page: #f5f6f8;
+  --card: #ffffff;
+  --card-2: #fbfbfc;
+  --sunken: #eef0f3;
+  --line: #e4e6ea;
+  --line-strong: #d3d7dd;
 
-  --ink: #16171a;
-  --ink-muted: #3c3f45;
-  --ink-subtle: #6b6f76;
-  --ink-tertiary: #8b8f96;
+  --ink: #101114;
+  --ink-2: #4a505a;
+  --ink-3: #858c97;
 
-  --accent: #5e6ad2;
-  --accent-hover: #4d58c4;
-  --accent-text: #4d58c4;
-  --on-accent: #ffffff;
+  --brand: #5b5bd6;
+  --brand-hover: #4a4ac4;
+  --brand-text: #4a4ac4;
+  --brand-wash: #eeeefc;
+  --on-brand: #ffffff;
 
-  --error: #d5333a;
-  --success: #17803d;
+  /* categorical - validated on #ffffff, light steps */
+  --cat-edit: #2a78d6;
+  --cat-command: #eb6834;
+  --cat-read: #1baf7a;
+  --cat-search: #eda100;
+  --cat-task: #e87ba4;
 
-  --shadow-pop:
-    0 1px 2px rgb(16 17 20 / 0.06),
-    0 16px 40px -12px rgb(16 17 20 / 0.18);
+  /* sequential blue ramp, heatmap */
+  --heat-0: #eef0f3;
+  --heat-1: #9ec5f4;
+  --heat-2: #5598e7;
+  --heat-3: #2a78d6;
+  --heat-4: #184f95;
+
+  /* status - reserved, never a series color */
+  --danger: #d03b3b;
+  --danger-wash: #fdeded;
+  --danger-line: #f5c9c9;
+  --good: #0ca30c;
+
+  --shadow-sm: 0 1px 2px rgb(16 17 20 / 0.05), 0 1px 1px rgb(16 17 20 / 0.03);
+  --shadow-md: 0 1px 3px rgb(16 17 20 / 0.06), 0 6px 16px -6px rgb(16 17 20 / 0.10);
+  --shadow-lg: 0 2px 6px rgb(16 17 20 / 0.07), 0 20px 44px -14px rgb(16 17 20 / 0.20);
   color-scheme: light;
 }
 
-/* derived - recompute automatically on theme swap */
-:root {
-  --selection: color-mix(in srgb, var(--accent) 30%, transparent);
-  --scrollbar: color-mix(in srgb, var(--ink) 16%, transparent);
-  --scrollbar-hover: color-mix(in srgb, var(--ink) 28%, transparent);
-  --error-bg: color-mix(in srgb, var(--error) 10%, transparent);
-  --error-line: color-mix(in srgb, var(--error) 30%, transparent);
-  --accent-bg: color-mix(in srgb, var(--accent) 10%, transparent);
+[data-theme="dark"] {
+  --page: #141517;
+  --card: #1c1d21;
+  --card-2: #212227;
+  --sunken: #26272c;
+  --line: #2f3138;
+  --line-strong: #3d4048;
+
+  --ink: #eceef2;
+  --ink-2: #a8aeba;
+  --ink-3: #757b86;
+
+  --brand: #7c7cf0;
+  --brand-hover: #9494f5;
+  --brand-text: #9494f5;
+  --brand-wash: #24243a;
+  --on-brand: #ffffff;
+
+  /* categorical - validated on #1c1d21, dark steps */
+  --cat-edit: #3987e5;
+  --cat-command: #d95926;
+  --cat-read: #199e70;
+  --cat-search: #c98500;
+  --cat-task: #d55181;
+
+  --heat-0: #26272c;
+  --heat-1: #184f95;
+  --heat-2: #256abf;
+  --heat-3: #3987e5;
+  --heat-4: #86b6ef;
+
+  --danger: #e66767;
+  --danger-wash: #2e1d1f;
+  --danger-line: #4d2b2d;
+  --good: #3ec13e;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 1px 3px rgb(0 0 0 / 0.45), 0 6px 16px -6px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.5), 0 20px 44px -14px rgb(0 0 0 / 0.7);
+  color-scheme: dark;
 }
 
-/* ---------- Tailwind token bridge ---------- */
+:root {
+  --selection: color-mix(in srgb, var(--brand) 24%, transparent);
+  --scrollbar: color-mix(in srgb, var(--ink) 18%, transparent);
+  --scrollbar-hover: color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
 @theme inline {
-  --color-canvas: var(--canvas);
-  --color-surface-1: var(--surface-1);
-  --color-surface-2: var(--surface-2);
-  --color-surface-3: var(--surface-3);
-  --color-hairline: var(--hairline);
-  --color-hairline-strong: var(--hairline-strong);
+  --color-page: var(--page);
+  --color-card: var(--card);
+  --color-card-2: var(--card-2);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
 
   --color-ink: var(--ink);
-  --color-ink-muted: var(--ink-muted);
-  --color-ink-subtle: var(--ink-subtle);
-  --color-ink-tertiary: var(--ink-tertiary);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
 
-  --color-accent: var(--accent);
-  --color-accent-hover: var(--accent-hover);
-  --color-accent-text: var(--accent-text);
-  --color-on-accent: var(--on-accent);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-text: var(--brand-text);
+  --color-brand-wash: var(--brand-wash);
 
-  --color-error: var(--error);
-  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-danger-wash: var(--danger-wash);
+  --color-danger-line: var(--danger-line);
+  --color-good: var(--good);
 }
 
 @theme {
@@ -107,9 +134,8 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* ---------- base ---------- */
 body {
-  @apply bg-canvas text-ink antialiased;
+  @apply bg-page text-ink antialiased;
   font-size: 14px;
   line-height: 1.6;
   letter-spacing: -0.05px;
@@ -123,19 +149,74 @@ pre,
   letter-spacing: 0;
 }
 
-/* every number that sits in a column */
+/* columns of figures align; standalone display numbers use proportional */
 .num {
   font-variant-numeric: tabular-nums;
 }
 
-/* the ONE uppercase style - positive tracking marks it as taxonomy */
 .eyebrow {
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.3;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  color: var(--ink-subtle);
+  color: var(--ink-3);
+}
+
+/* Tailwind v4's preflight sets `button { cursor: default }`. Everything
+   clickable in this app is a <button>, so put the pointer back. */
+/* In @layer base so Tailwind's utility layer still wins - an unlayered rule
+   would outrank `cursor-default` on the rare non-clickable button. */
+@layer base {
+  button,
+  [role="option"],
+  summary,
+  a[href] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
+}
+
+/* the elevation primitive - every panel is one of these */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* a card you can click - lifts toward the cursor */
+.card-interactive {
+  transition:
+    border-color 0.15s ease-out,
+    box-shadow 0.15s ease-out,
+    transform 0.15s ease-out;
+}
+.card-interactive:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+.card-interactive:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+/* selected row: brand wash + a 2px rail, so selection survives at a glance */
+.is-selected {
+  background: var(--brand-wash);
+  border-color: color-mix(in srgb, var(--brand) 35%, transparent) !important;
+}
+.is-selected::before {
+  content: "";
+  position: absolute;
+  inset-block: 6px;
+  left: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--brand);
 }
 
 ::selection {
@@ -144,33 +225,50 @@ pre,
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
-/* popovers float, so they alone carry a shadow */
-.pop {
-  box-shadow: var(--shadow-pop);
-}
-
-/* keycap */
 .kbd {
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1;
   padding: 3px 5px;
   border-radius: 4px;
-  color: var(--ink-tertiary);
-  background: var(--surface-2);
-  border: 1px solid var(--hairline);
+  color: var(--ink-3);
+  background: var(--sunken);
+  border: 1px solid var(--line);
 }
 
-/* ---------- motion: 120-160ms, that's the whole budget ---------- */
+/* ---------- chart primitives ---------- */
+
+/* 2px surface gap between stacked segments, per the mark spec */
+.seg {
+  box-shadow: 0 0 0 2px var(--card);
+}
+
+/* tooltip layer */
+.tip {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* ---------- motion ---------- */
 @keyframes pop-open {
   from {
     opacity: 0;
-    transform: translateY(-2px);
+    transform: translateY(-3px);
   }
   to {
     opacity: 1;
@@ -178,13 +276,26 @@ pre,
   }
 }
 .pop-open {
-  animation: pop-open 0.12s ease-out both;
+  animation: pop-open 0.13s ease-out both;
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.grow-x {
+  transform-origin: left;
+  animation: grow-x 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* ---------- scrollbars ---------- */
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 *::-webkit-scrollbar-thumb {
   background: var(--scrollbar);
@@ -226,51 +337,46 @@ pre,
   @apply text-[14px];
 }
 .md strong {
-  @apply font-medium text-ink;
+  @apply font-semibold text-ink;
 }
 .md em {
   @apply italic;
 }
 .md a {
-  @apply text-accent-text underline underline-offset-2;
-  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
-}
-.md a:hover {
-  text-decoration-color: var(--accent-text);
+  @apply text-brand-text underline underline-offset-2;
 }
 .md ul {
-  @apply my-2 list-disc pl-5 marker:text-ink-tertiary;
+  @apply my-2 list-disc pl-5 marker:text-ink-3;
 }
 .md ol {
-  @apply my-2 list-decimal pl-5 marker:text-ink-tertiary;
+  @apply my-2 list-decimal pl-5 marker:text-ink-3;
 }
 .md li {
   @apply my-0.5;
 }
 .md blockquote {
-  @apply my-2 border-l-2 border-hairline-strong pl-3 text-ink-subtle;
+  @apply my-2 border-l-2 border-line-strong pl-3 text-ink-2;
 }
 .md hr {
-  @apply my-3 border-hairline;
+  @apply my-3 border-line;
 }
 .md code:not(pre code) {
-  @apply rounded bg-surface-2 px-1 py-0.5 text-[0.85em] text-ink-muted;
+  @apply rounded bg-sunken px-1 py-0.5 text-[0.85em] text-ink;
 }
 .md pre {
-  @apply my-2 max-w-full overflow-x-auto rounded-lg border border-hairline bg-surface-1 p-3 text-[12px] leading-relaxed text-ink-muted;
+  @apply my-2 max-w-full overflow-x-auto rounded-lg border border-line bg-sunken p-3 text-[12px] leading-relaxed text-ink-2;
 }
 .md table {
   @apply my-2 w-full border-collapse text-[13px];
 }
 .md th,
 .md td {
-  @apply border border-hairline px-2 py-1 text-left;
+  @apply border border-line px-2 py-1 text-left;
 }
 .md th {
-  @apply bg-surface-2 font-medium text-ink;
+  @apply bg-sunken font-semibold text-ink;
 }
 
-/* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

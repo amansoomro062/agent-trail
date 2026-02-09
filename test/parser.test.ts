@@ -348,6 +348,73 @@ describe('files touched', () => {
   });
 });
 
+describe('tool tally', () => {
+  it('buckets every tool call into one of the five categories', async () => {
+    const dir = tempDir();
+    const file = writeTranscript(dir, 'session-1', [
+      assistantEvent({
+        id: 'msg_a',
+        content: [
+          toolUse('t1', 'Write', { file_path: '/a.ts' }),
+          toolUse('t2', 'Edit', { file_path: '/b.ts' }),
+          toolUse('t3', 'MultiEdit', { file_path: '/c.ts' }),
+          toolUse('t4', 'Bash', { command: 'ls' }),
+          toolUse('t5', 'Read', { file_path: '/d.ts' }),
+          toolUse('t6', 'Grep', { pattern: 'x' }),
+          toolUse('t7', 'WebFetch', { url: 'https://example.com' }),
+          toolUse('t8', 'Task', { description: 'sub' }),
+          toolUse('t9', 'SomeFutureTool', {}),
+        ],
+      }),
+    ]);
+    const { summary } = await parseTranscript(file, { withMessages: false });
+    assert.deepEqual(summary.tools, {
+      edit: 3,
+      command: 1,
+      read: 1,
+      search: 2, // Grep + WebFetch
+      task: 2, // Task + the unrecognized tool
+      errors: 0,
+      total: 9,
+    });
+  });
+
+  it('counts failed calls separately from the category totals', async () => {
+    const dir = tempDir();
+    const file = writeTranscript(dir, 'session-1', [
+      assistantEvent({
+        id: 'msg_a',
+        content: [
+          toolUse('t1', 'Bash', { command: 'exit 1' }),
+          toolUse('t2', 'Bash', { command: 'true' }),
+        ],
+      }),
+      userEvent({
+        content: [toolResult('t1', 'boom', true), toolResult('t2', 'fine')],
+      }),
+    ]);
+    const { summary } = await parseTranscript(file, { withMessages: false });
+    assert.equal(summary.tools.command, 2, 'errors still count toward their category');
+    assert.equal(summary.tools.errors, 1);
+    assert.equal(summary.tools.total, 2);
+  });
+
+  it('reports an all-zero tally for a session with no tool calls', async () => {
+    const dir = tempDir();
+    const file = writeTranscript(dir, 'session-1', [userEvent({ content: 'just talking' })]);
+    const { summary } = await parseTranscript(file, { withMessages: false });
+    assert.deepEqual(summary.tools, {
+      edit: 0,
+      command: 0,
+      read: 0,
+      search: 0,
+      task: 0,
+      errors: 0,
+      total: 0,
+    });
+  });
+});
+
 describe('corpus discovery', () => {
   it('finds .jsonl files exactly one level deep', async () => {
     const root = tempDir();

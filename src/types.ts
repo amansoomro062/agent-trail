@@ -25,6 +25,28 @@ export interface TokenUsage {
   cacheCreation: number;
 }
 
+/**
+ * Tool categories. These drive both the tally below and the categorical color
+ * slots in the dashboard, so the set is deliberately small - five is the most
+ * a stacked bar can carry while staying readable.
+ */
+export type ToolCategory = 'edit' | 'command' | 'read' | 'search' | 'task';
+
+export const TOOL_CATEGORIES: ToolCategory[] = ['edit', 'command', 'read', 'search', 'task'];
+
+/** Per-session count of tool calls by category. */
+export interface ToolTally {
+  edit: number;
+  command: number;
+  read: number;
+  search: number;
+  task: number;
+  /** Calls whose result carried is_error. */
+  errors: number;
+  /** Sum of the five categories. */
+  total: number;
+}
+
 /** Lightweight session metadata, shown in the sidebar list. */
 export interface SessionSummary {
   /** Session UUID (filename without .jsonl). */
@@ -46,6 +68,8 @@ export interface SessionSummary {
   tokens: TokenUsage | null;
   /** Files touched via Edit/Write/MultiEdit/Read tools. */
   filesTouched: FileEdit[];
+  /** Tool calls bucketed by category - drives the activity visualizations. */
+  tools: ToolTally;
   /** First real user text message, used as a session title hint. */
   firstUserMessage: string | null;
   /** File modification time of the transcript (ms epoch) - used for recency sort. */

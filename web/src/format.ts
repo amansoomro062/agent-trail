@@ -79,6 +79,32 @@ export function durationText(start: string | null, end: string | null): string {
   return `${d}d ${h % 24}h`;
 }
 
+/**
+ * One-line plain-text preview of a markdown blob - enough to tell whether a
+ * collapsed reply is worth opening. Strips the syntax that would otherwise
+ * render as noise (#, *, `, >, list bullets, link brackets).
+ */
+export function previewText(md: string, max = 160): string {
+  const flat = md
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/\*\*|__|\*|_|~~/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return flat.length > max ? flat.slice(0, max).trimEnd() + '…' : flat;
+}
+
+/** Rough word count, for showing how much text a collapsed reply hides. */
+export function wordCount(s: string): number {
+  const m = s.trim().match(/\S+/g);
+  return m ? m.length : 0;
+}
+
 /** Drop the vendor prefix from a model id: "claude-opus-5[1m]" → "opus-5". */
 export function shortModel(model: string): string {
   return model.replace(/^claude-/, '').replace(/-\d{8}$/, '');

@@ -152,11 +152,8 @@ export default function SessionView({
       <FilesPanel files={summary.filesTouched} />
 
       <div className="card mt-4 overflow-hidden">
-        <h2 className="border-b border-line px-4 py-3 text-[13px] font-semibold text-ink">
-          Transcript
-        </h2>
         {loading && <p className="px-4 py-5 text-[13px] text-ink-3">Loading…</p>}
-        {!loading && detail && <Timeline messages={detail.messages} />}
+        {!loading && detail && <Timeline key={detail.id} messages={detail.messages} />}
       </div>
     </div>
   );

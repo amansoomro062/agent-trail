@@ -4,17 +4,24 @@ import { fetchSession, fetchSessions } from './api';
 import Sidebar from './components/Sidebar';
 import SearchBar from './components/SearchBar';
 import HomeDashboard from './components/HomeDashboard';
+import ProjectDashboard from './components/ProjectDashboard';
 import SessionView from './components/SessionView';
 import ThemeSwitcher from './components/ThemeSwitcher';
 import TrailMark from './components/TrailMark';
 
+type View =
+  | { kind: 'home' }
+  | { kind: 'project'; path: string }
+  | { kind: 'session'; id: string };
+
 export default function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // null = the overview dashboard
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [view, setView] = useState<View>({ kind: 'home' });
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+
+  const selectedId = view.kind === 'session' ? view.id : null;
 
   useEffect(() => {
     fetchSessions()
@@ -34,11 +41,20 @@ export default function App() {
       .finally(() => setDetailLoading(false));
   }, [selectedId]);
 
-  const select = useCallback((id: string) => {
-    setSelectedId(id);
-    document.getElementById('main-scroll')?.scrollTo({ top: 0 });
+  const toTop = () => document.getElementById('main-scroll')?.scrollTo({ top: 0 });
+
+  const openSession = useCallback((id: string) => {
+    setView({ kind: 'session', id });
+    toTop();
   }, []);
-  const goHome = useCallback(() => setSelectedId(null), []);
+  const openProject = useCallback((path: string) => {
+    setView({ kind: 'project', path });
+    toTop();
+  }, []);
+  const goHome = useCallback(() => {
+    setView({ kind: 'home' });
+    toTop();
+  }, []);
 
   const summary = sessions.find((s) => s.id === selectedId) ?? null;
 
@@ -52,7 +68,7 @@ export default function App() {
           </span>
         </button>
         <div className="flex flex-1 justify-center">
-          <SearchBar onJump={select} />
+          <SearchBar onJump={openSession} />
         </div>
         <ThemeSwitcher />
       </header>
@@ -61,7 +77,10 @@ export default function App() {
         <Sidebar
           sessions={sessions}
           selectedId={selectedId}
-          onSelect={select}
+          activeProject={view.kind === 'project' ? view.path : null}
+          isHome={view.kind === 'home'}
+          onSelect={openSession}
+          onProject={openProject}
           onHome={goHome}
         />
 
@@ -83,8 +102,22 @@ export default function App() {
             </div>
           )}
 
-          {!loadError && sessions.length > 0 && !summary && (
-            <HomeDashboard sessions={sessions} onSelect={select} />
+          {!loadError && sessions.length > 0 && view.kind === 'home' && (
+            <HomeDashboard
+              sessions={sessions}
+              onSelect={openSession}
+              onProject={openProject}
+            />
+          )}
+
+          {!loadError && view.kind === 'project' && (
+            <ProjectDashboard
+              key={view.path}
+              path={view.path}
+              sessions={sessions}
+              onSelect={openSession}
+              onHome={goHome}
+            />
           )}
 
           {!loadError && summary && (
@@ -93,6 +126,8 @@ export default function App() {
               summary={summary}
               detail={detail && detail.id === summary.id ? detail : null}
               loading={detailLoading}
+              onProject={openProject}
+              onHome={goHome}
             />
           )}
         </main>

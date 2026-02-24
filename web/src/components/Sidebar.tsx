@@ -6,12 +6,24 @@ import { MixSpark } from './charts';
 interface Props {
   sessions: SessionSummary[];
   selectedId: string | null;
+  activeProject: string | null;
+  isHome: boolean;
   onSelect: (id: string) => void;
+  onProject: (path: string) => void;
   onHome: () => void;
 }
 
-export default function Sidebar({ sessions, selectedId, onSelect, onHome }: Props) {
+export default function Sidebar({
+  sessions,
+  selectedId,
+  activeProject,
+  isHome,
+  onSelect,
+  onProject,
+  onHome,
+}: Props) {
   const [filter, setFilter] = useState('');
+  const [showProjects, setShowProjects] = useState(true);
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -24,13 +36,26 @@ export default function Sidebar({ sessions, selectedId, onSelect, onHome }: Prop
     );
   }, [sessions, filter]);
 
+  /** Distinct projects, keyed by path - two projects can share a basename. */
+  const projects = useMemo(() => {
+    const m = new Map<string, { name: string; count: number }>();
+    for (const s of sessions) {
+      const cur = m.get(s.projectPath);
+      if (cur) cur.count += 1;
+      else m.set(s.projectPath, { name: s.projectName, count: 1 });
+    }
+    return [...m.entries()]
+      .map(([path, v]) => ({ path, ...v }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [sessions]);
+
   return (
     <aside className="flex h-full w-[288px] shrink-0 flex-col border-r border-line bg-card">
       <div className="border-b border-line p-3">
         <button
           onClick={onHome}
           className={`mb-2.5 flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors duration-150 ${
-            selectedId === null
+            isHome
               ? 'bg-brand-wash text-brand-text'
               : 'text-ink-2 hover:bg-sunken hover:text-ink active:scale-[0.99]'
           }`}
@@ -43,6 +68,50 @@ export default function Sidebar({ sessions, selectedId, onSelect, onHome }: Prop
           </svg>
           Overview
         </button>
+
+        {/* projects - a way into the per-project dashboards */}
+        <div className="mb-2.5">
+          <button
+            onClick={() => setShowProjects((v) => !v)}
+            aria-expanded={showProjects}
+            className="mb-1 flex w-full items-center gap-1.5 px-0.5 text-left"
+          >
+            <svg
+              viewBox="0 0 12 12"
+              fill="none"
+              className={`h-2 w-2 shrink-0 text-ink-3 transition-transform duration-150 ${
+                showProjects ? 'rotate-90' : ''
+              }`}
+              aria-hidden="true"
+            >
+              <path d="m4 2 4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="eyebrow">Projects</span>
+            <span className="num ml-auto text-[12px] text-ink-3">{projects.length}</span>
+          </button>
+          {showProjects && (
+            <div className="flex max-h-44 flex-col gap-px overflow-y-auto">
+              {projects.map((p) => {
+                const active = p.path === activeProject;
+                return (
+                  <button
+                    key={p.path}
+                    onClick={() => onProject(p.path)}
+                    title={p.path}
+                    className={`flex items-center gap-2 rounded-md px-2 py-1 text-left transition-colors duration-150 ${
+                      active
+                        ? 'bg-brand-wash text-brand-text'
+                        : 'text-ink-2 hover:bg-sunken hover:text-ink'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
+                    <span className="num shrink-0 text-[11px] text-ink-3">{p.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="mb-2 flex items-baseline justify-between px-0.5">
           <span className="eyebrow">Sessions</span>

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { SessionSummary } from '../types';
-import { formatTokens, relativeTime, shortPath } from '../format';
-import { emptyTally, categoryColor } from '../viz';
+import { durationText, formatTokens, relativeTime, shortPath } from '../format';
+import { categoryColor, emptyTally } from '../viz';
 import { BarList, Heatmap, MixSpark, StatRow, StatTile, ToolMixBar } from './charts';
 import type { BarItem } from './charts';
 
@@ -27,26 +27,35 @@ function Panel({
   );
 }
 
-export default function HomeDashboard({
+/** Everything the agents have done in one project, across all its sessions. */
+export default function ProjectDashboard({
+  path,
   sessions,
   onSelect,
-  onProject,
+  onHome,
 }: {
+  path: string;
   sessions: SessionSummary[];
   onSelect: (id: string) => void;
-  onProject: (path: string) => void;
+  onHome: () => void;
 }) {
+  const mine = useMemo(
+    () => sessions.filter((s) => s.projectPath === path),
+    [sessions, path],
+  );
+
   const stats = useMemo(() => {
     const tally = emptyTally();
     let messages = 0;
     let tokensIn = 0;
     let tokensOut = 0;
     let tokensCached = 0;
-    const fileCounts = new Map<string, number>();
-    const projects = new Map<string, { name: string; count: number }>();
     const byDay = new Map<string, number>();
+    // how many distinct sessions touched each file - the "keeps coming back" signal
+    const fileSessions = new Map<string, Set<string>>();
+    const fileTouches = new Map<string, number>();
 
-    for (const s of sessions) {
+    for (const s of mine) {
       messages += s.messageCount;
       tally.edit += s.tools.edit;
       tally.command += s.tools.command;
@@ -57,22 +66,10 @@ export default function HomeDashboard({
       tally.total += s.tools.total;
 
       if (s.tokens) {
-        // Cache reads dwarf everything else and are billed at a fraction of the
-        // rate, so folding them into a headline "tokens" figure reads as wildly
-        // inflated. They get their own line instead.
         tokensIn += s.tokens.input;
         tokensOut += s.tokens.output;
         tokensCached += s.tokens.cacheRead + s.tokens.cacheCreation;
       }
-
-      for (const f of s.filesTouched) {
-        if (f.operation === 'read') continue; // rank by what actually changed
-        fileCounts.set(f.path, (fileCounts.get(f.path) ?? 0) + f.count);
-      }
-
-      const proj = projects.get(s.projectPath);
-      if (proj) proj.count += 1;
-      else projects.set(s.projectPath, { name: s.projectName, count: 1 });
 
       const when = s.endTime ?? s.startTime;
       if (when) {
@@ -84,61 +81,78 @@ export default function HomeDashboard({
           byDay.set(key, (byDay.get(key) ?? 0) + 1);
         }
       }
+
+      for (const f of s.filesTouched) {
+        if (f.operation === 'read') continue;
+        if (!fileSessions.has(f.path)) fileSessions.set(f.path, new Set());
+        fileSessions.get(f.path)!.add(s.id);
+        fileTouches.set(f.path, (fileTouches.get(f.path) ?? 0) + f.count);
+      }
     }
 
-    const topFiles: BarItem[] = [...fileCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([path, count]) => ({
-        label: shortPath(path),
-        sub: path,
-        value: count,
+    const recurring: BarItem[] = [...fileSessions.entries()]
+      .map(([p, set]) => ({ p, n: set.size }))
+      .sort((a, b) => b.n - a.n || (fileTouches.get(b.p) ?? 0) - (fileTouches.get(a.p) ?? 0))
+      .slice(0, 10)
+      .map(({ p, n }) => ({
+        label: shortPath(p),
+        sub: p,
+        value: n,
         color: categoryColor('edit'),
       }));
 
-    const topProjects: BarItem[] = [...projects.entries()]
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 8)
-      .map(([path, { name, count }]) => ({
-        label: name,
-        sub: path,
-        value: count,
+    const busiest: BarItem[] = [...fileTouches.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([p, n]) => ({
+        label: shortPath(p),
+        sub: p,
+        value: n,
         color: categoryColor('task'),
-        onClick: () => onProject(path),
       }));
 
-    const filesChanged = fileCounts.size;
-
     return {
-      tally, messages, tokensIn, tokensOut, tokensCached,
-      topFiles, topProjects, byDay, filesChanged,
+      tally,
+      messages,
+      tokensIn,
+      tokensOut,
+      tokensCached,
+      byDay,
+      recurring,
+      busiest,
+      filesChanged: fileSessions.size,
     };
-  }, [sessions, onProject]);
+  }, [mine]);
 
-  const recent = sessions.slice(0, 5);
+  const name = mine[0]?.projectName ?? shortPath(path, 1);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-6">
+      <nav className="mb-3 flex items-center gap-1.5 text-[12px] text-ink-3">
+        <button onClick={onHome} className="transition-colors duration-150 hover:text-ink">
+          Overview
+        </button>
+        <span aria-hidden="true">/</span>
+        <span className="text-ink-2">{name}</span>
+      </nav>
+
       <div className="mb-5">
         <h1 className="text-[22px] font-semibold text-ink" style={{ letterSpacing: '-0.5px' }}>
-          Overview
+          {name}
         </h1>
-        <p className="mt-0.5 text-[13px] text-ink-3">
-          Everything your agents have done across {sessions.length}{' '}
-          {sessions.length === 1 ? 'session' : 'sessions'}.
-        </p>
+        <p className="mono mt-0.5 truncate text-[12px] text-ink-3">{path}</p>
       </div>
 
       <div className="card mb-4 overflow-hidden">
         <StatRow>
-          <StatTile value={sessions.length} label="Sessions" />
+          <StatTile value={mine.length} label="Sessions" />
           <StatTile value={stats.messages.toLocaleString()} label="Messages" />
           <StatTile value={stats.tally.total.toLocaleString()} label="Tool calls" />
           <StatTile value={stats.filesChanged.toLocaleString()} label="Files changed" />
           <StatTile
             value={formatTokens(stats.tokensIn + stats.tokensOut)}
             label="Tokens"
-            hint={`${stats.tokensIn.toLocaleString()} in · ${stats.tokensOut.toLocaleString()} out\n${stats.tokensCached.toLocaleString()} cached (read + creation), excluded from this total`}
+            hint={`${stats.tokensIn.toLocaleString()} in · ${stats.tokensOut.toLocaleString()} out\n${stats.tokensCached.toLocaleString()} cached, excluded from this total`}
           />
           <StatTile
             value={stats.tally.errors.toLocaleString()}
@@ -149,7 +163,7 @@ export default function HomeDashboard({
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title="Activity" subtitle="Sessions per day" className="lg:col-span-2">
+        <Panel title="Activity" subtitle="Sessions per day in this project" className="lg:col-span-2">
           <Heatmap cells={stats.byDay} weeks={18} />
         </Panel>
         <Panel title="What the agents did" subtitle="Tool calls by type">
@@ -158,30 +172,30 @@ export default function HomeDashboard({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title="Most-changed files" subtitle="Writes and edits only">
-          <BarList items={stats.topFiles} unit="changes" />
+        <Panel title="Files that keep coming back" subtitle="Sessions that changed each file">
+          <BarList items={stats.recurring} unit="sessions" />
         </Panel>
-        <Panel title="Busiest projects" subtitle="By session count">
-          <BarList items={stats.topProjects} unit="sessions" />
+        <Panel title="Most-changed files" subtitle="Total writes and edits">
+          <BarList items={stats.busiest} unit="changes" />
         </Panel>
-        <Panel title="Recent sessions">
-          <div className="flex flex-col gap-2.5">
-            {recent.map((s) => (
+        <Panel title={`Sessions · ${mine.length}`}>
+          <div className="flex max-h-[420px] flex-col gap-2.5 overflow-y-auto">
+            {mine.map((s) => (
               <button
                 key={s.id}
                 onClick={() => onSelect(s.id)}
                 className="card-interactive rounded-lg border border-line bg-card px-3 py-2 text-left hover:bg-card-2"
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-[13px] font-medium text-ink">
-                    {s.projectName}
+                  <span className="num truncate text-[12px] text-ink-2">
+                    {s.messageCount} msg · {durationText(s.startTime, s.endTime)}
                   </span>
                   <span className="num shrink-0 text-[11px] text-ink-3">
                     {relativeTime(s.endTime ?? s.startTime)}
                   </span>
                 </div>
                 {s.firstUserMessage && (
-                  <p className="mt-0.5 truncate text-[12px] text-ink-3">{s.firstUserMessage}</p>
+                  <p className="mt-0.5 truncate text-[13px] text-ink">{s.firstUserMessage}</p>
                 )}
                 <MixSpark tally={s.tools} className="mt-2" />
               </button>

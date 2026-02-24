@@ -1,10 +1,11 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { SessionDetail, SessionSummary } from '../types';
 import { durationText, formatTokens, shortModel, clockTime, relativeTime } from '../format';
 import { toolCategory } from '../viz';
 import { ActivityStrip, StatRow, StatTile, ToolMixBar } from './charts';
 import type { StripBand } from './charts';
 import FilesPanel from './FilesPanel';
+import SessionDigest from './SessionDigest';
 import Timeline from './Timeline';
 
 const LIVE_WINDOW_MS = 15 * 60 * 1000;
@@ -47,19 +48,33 @@ function buildBands(detail: SessionDetail): StripBand[] {
   return bands;
 }
 
+type Tab = 'summary' | 'transcript';
+
 export default function SessionView({
   summary,
   detail,
   loading,
+  onProject,
+  onHome,
 }: {
   summary: SessionSummary;
   detail: SessionDetail | null;
   loading: boolean;
+  onProject: (path: string) => void;
+  onHome: () => void;
 }) {
+  const [tab, setTab] = useState<Tab>('summary');
   const bands = useMemo(() => (detail ? buildBands(detail) : []), [detail]);
 
-  const jump = useCallback((uuid: string) => {
+  const scrollTo = (uuid: string) => {
     document.getElementById(`ev-${uuid}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  /** From the strip or the digest: switch to the transcript, then scroll. */
+  const jump = useCallback((uuid: string) => {
+    setTab('transcript');
+    // wait for the transcript to mount before looking for the anchor
+    requestAnimationFrame(() => requestAnimationFrame(() => scrollTo(uuid)));
   }, []);
 
   const end = summary.endTime ?? summary.startTime;
@@ -74,6 +89,21 @@ export default function SessionView({
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">
+      <nav className="mb-3 flex items-center gap-1.5 text-[12px] text-ink-3">
+        <button onClick={onHome} className="transition-colors duration-150 hover:text-ink">
+          Overview
+        </button>
+        <span aria-hidden="true">/</span>
+        <button
+          onClick={() => onProject(summary.projectPath)}
+          className="transition-colors duration-150 hover:text-ink"
+        >
+          {summary.projectName}
+        </button>
+        <span aria-hidden="true">/</span>
+        <span className="mono text-ink-2">{summary.id.slice(0, 8)}</span>
+      </nav>
+
       {/* header card */}
       <div className="card mb-4 overflow-hidden">
         <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-4">
@@ -142,19 +172,44 @@ export default function SessionView({
         </div>
       </div>
 
-      {summary.tools.total > 0 && (
-        <div className="card mb-4 p-4">
-          <h2 className="mb-3.5 text-[13px] font-semibold text-ink">Tool activity</h2>
-          <ToolMixBar tally={summary.tools} height={12} />
+      {/* tabs */}
+      <div className="mb-4 flex items-center gap-1 border-b border-line">
+        {(['summary', 'transcript'] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            aria-current={tab === t ? 'page' : undefined}
+            className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-medium capitalize transition-colors duration-150 ${
+              tab === t
+                ? 'border-brand text-brand-text'
+                : 'border-transparent text-ink-3 hover:text-ink'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'summary' && (
+        <div className="flex flex-col gap-4">
+          {summary.tools.total > 0 && (
+            <div className="card p-4">
+              <h2 className="mb-3.5 text-[13px] font-semibold text-ink">Tool activity</h2>
+              <ToolMixBar tally={summary.tools} height={12} />
+            </div>
+          )}
+          {loading && <p className="px-1 text-[13px] text-ink-3">Loading…</p>}
+          <SessionDigest summary={summary} detail={detail} onJump={jump} />
+          <FilesPanel files={summary.filesTouched} />
         </div>
       )}
 
-      <FilesPanel files={summary.filesTouched} />
-
-      <div className="card mt-4 overflow-hidden">
-        {loading && <p className="px-4 py-5 text-[13px] text-ink-3">Loading…</p>}
-        {!loading && detail && <Timeline key={detail.id} messages={detail.messages} />}
-      </div>
+      {tab === 'transcript' && (
+        <div className="card overflow-hidden">
+          {loading && <p className="px-4 py-5 text-[13px] text-ink-3">Loading…</p>}
+          {!loading && detail && <Timeline key={detail.id} messages={detail.messages} />}
+        </div>
+      )}
     </div>
   );
 }

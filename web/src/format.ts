@@ -39,6 +39,19 @@ export function shortPath(p: string, segments = 2): string {
   return parts.slice(-segments).join('/');
 }
 
+/**
+ * Path relative to a project root, e.g. "./web/src/components/".
+ * Paths outside the root (a temp dir, another repo) keep enough tail to stay
+ * identifiable rather than being forced into a misleading relative form.
+ */
+export function relativeToRoot(p: string, root: string): string {
+  if (root && p.startsWith(root)) {
+    const rest = p.slice(root.length).replace(/^\/+/, '');
+    return rest ? `./${rest}` : './';
+  }
+  return shortPath(p, 3);
+}
+
 /** Directory portion of a path, without the trailing basename. */
 export function dirname(p: string): string {
   const i = p.lastIndexOf('/');

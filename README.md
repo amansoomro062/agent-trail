@@ -115,6 +115,11 @@ dark). Re-run the validator before changing any of them. Three light slots
 sit under 3:1 contrast by design, which is why every colored mark in the UI
 ships next to a visible text label carrying its value.
 
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Short version: issues first for
+anything big, tests for parser changes, no new runtime deps for the CLI.
+
 ## License
 
 [MIT](LICENSE)

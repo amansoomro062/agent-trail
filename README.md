@@ -78,7 +78,7 @@ calls.
 
 - [ ] Cursor / Codex / other agent transcript ingestion
 - [ ] Cost sidebar (per-session $ estimates)
-- [ ] Diff view for Edit/MultiEdit operations
+- [x] Diff view for Edit/MultiEdit operations
 - [ ] Optional cloud sync / team sharing
 - [ ] Live tail of in-progress sessions
 

@@ -155,6 +155,95 @@ describe('tool results', () => {
   });
 });
 
+describe('edit diffs', () => {
+  it('keeps the old/new strings of an Edit tool call', async () => {
+    const dir = tempDir();
+    const file = writeTranscript(dir, 'session-1', [
+      assistantEvent({
+        id: 'msg_a',
+        content: [
+          toolUse('toolu_e', 'Edit', {
+            file_path: '/proj/a.ts',
+            old_string: 'const x = 1;',
+            new_string: 'const x = 2;',
+          }),
+        ],
+      }),
+    ]);
+    const { messages } = await parseTranscript(file, { withMessages: true });
+    assert.deepEqual(messages[0].toolUses[0].edits, [
+      { oldText: 'const x = 1;', newText: 'const x = 2;' },
+    ]);
+  });
+
+  it('keeps one pair per edit of a MultiEdit tool call', async () => {
+    const dir = tempDir();
+    const file = writeTranscript(dir, 'session-1', [
+      assistantEvent({
+        id: 'msg_a',
+        content: [
+          toolUse('toolu_m', 'MultiEdit', {
+            file_path: '/proj/a.ts',
+            edits: [
+              { old_string: 'a', new_string: 'b' },
+              { old_string: 'c', new_string: 'd' },
+            ],
+          }),
+        ],
+      }),
+    ]);
+    const { messages } = await parseTranscript(file, { withMessages: true });
+    assert.deepEqual(messages[0].toolUses[0].edits, [
+      { oldText: 'a', newText: 'b' },
+      { oldText: 'c', newText: 'd' },
+    ]);
+  });
+
+  it('leaves edits undefined for tools that are not Edit/MultiEdit', async () => {
+    const dir = tempDir();
+    const file = writeTranscript(dir, 'session-1', [
+      assistantEvent({
+        id: 'msg_a',
+        content: [
+          toolUse('t1', 'Write', { file_path: '/proj/new.ts', content: 'hello' }),
+          toolUse('t2', 'Read', { file_path: '/proj/a.ts' }),
+          toolUse('t3', 'Bash', { command: 'ls' }),
+          toolUse('t4', 'NotebookEdit', { notebook_path: '/proj/n.ipynb' }),
+        ],
+      }),
+    ]);
+    const { messages } = await parseTranscript(file, { withMessages: true });
+    for (const tool of messages[0].toolUses) {
+      assert.equal(tool.edits, undefined, `${tool.name} carries no diff payload`);
+    }
+  });
+
+  it('tolerates missing or partial edit input', async () => {
+    const dir = tempDir();
+    // Truncated transcripts can cut tool_use input off mid-object.
+    const file = writeTranscript(dir, 'session-1', [
+      assistantEvent({
+        id: 'msg_a',
+        content: [
+          toolUse('t1', 'Edit', { file_path: '/proj/a.ts' }),
+          toolUse('t2', 'Edit', { file_path: '/proj/a.ts', old_string: 'x' }),
+          toolUse('t3', 'MultiEdit', { file_path: '/proj/a.ts' }),
+          toolUse('t4', 'MultiEdit', {
+            file_path: '/proj/a.ts',
+            edits: [{ old_string: 'x', new_string: 'y' }, { old_string: 1 }, 'junk'],
+          }),
+        ],
+      }),
+    ]);
+    const { messages } = await parseTranscript(file, { withMessages: true });
+    const tools = messages[0].toolUses;
+    assert.equal(tools[0].edits, undefined, 'no old_string/new_string, no diff');
+    assert.equal(tools[1].edits, undefined, 'a missing side drops the pair');
+    assert.equal(tools[2].edits, undefined, 'no edits array, no diff');
+    assert.deepEqual(tools[3].edits, [{ oldText: 'x', newText: 'y' }], 'invalid entries skipped');
+  });
+});
+
 describe('malformed input', () => {
   it('skips unparseable lines without losing the rest of the file', async () => {
     const dir = tempDir();

@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import type { Message, ToolEvent, ToolResult } from '../types';
 import { basename, clockTime, dirname, previewText, shortModel, wordCount } from '../format';
 import { CATEGORY, categoryColor, toolCategory } from '../viz';
+import DiffView from './DiffView';
 import ToolIcon from './ToolIcon';
 
 function Chevron({ open, className = '' }: { open: boolean; className?: string }) {
@@ -28,16 +29,18 @@ function ToolCall({ tool }: { tool: ToolEvent }) {
   const [expanded, setExpanded] = useState(false);
   const target = tool.filePath ?? tool.summary ?? '';
   const hasResult = Boolean(tool.resultPreview);
+  const hasDiff = Boolean(tool.edits && tool.edits.length > 0);
+  const expandable = hasResult || hasDiff;
   const cat = toolCategory(tool.name);
   const failed = tool.isError === true;
 
   return (
     <div className="border-b border-line last:border-b-0">
       <button
-        onClick={() => hasResult && setExpanded((v) => !v)}
-        aria-expanded={hasResult ? expanded : undefined}
+        onClick={() => expandable && setExpanded((v) => !v)}
+        aria-expanded={expandable ? expanded : undefined}
         className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left transition-colors duration-150 ${
-          hasResult ? 'cursor-pointer hover:bg-card-2' : 'cursor-default'
+          expandable ? 'cursor-pointer hover:bg-card-2' : 'cursor-default'
         }`}
       >
         <span
@@ -64,8 +67,9 @@ function ToolCall({ tool }: { tool: ToolEvent }) {
             failed
           </span>
         )}
-        {hasResult && <Chevron open={expanded} className="ml-auto text-ink-3" />}
+        {expandable && <Chevron open={expanded} className="ml-auto text-ink-3" />}
       </button>
+      {expanded && hasDiff && <DiffView edits={tool.edits ?? []} />}
       {expanded && tool.resultPreview && (
         <pre className="mono pop-open max-h-64 overflow-auto whitespace-pre-wrap break-all border-t border-line bg-sunken px-3 py-2 text-[11px] leading-relaxed text-ink-2">
           {tool.resultPreview}

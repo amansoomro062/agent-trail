@@ -42,11 +42,17 @@ export interface SessionSummary {
   mtime: number;
 }
 
+export interface EditDiff {
+  oldText: string;
+  newText: string;
+}
+
 export interface ToolEvent {
   id: string;
   name: string;
   filePath?: string;
   summary?: string;
+  edits?: EditDiff[];
   resultPreview?: string;
   isError?: boolean;
 }

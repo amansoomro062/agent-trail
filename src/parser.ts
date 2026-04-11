@@ -41,6 +41,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as readline from 'node:readline';
 import type {
+  EditDiff,
   FileEdit,
   Message,
   SearchIndexEntry,
@@ -61,6 +62,8 @@ const TEXT_BLOCK_CAP = 100_000;
 const INDEX_TEXT_CAP = 4000;
 /** Max chars for a tool call summary. */
 const TOOL_SUMMARY_CAP = 200;
+/** Max chars kept per side of an Edit/MultiEdit diff. */
+const EDIT_DIFF_CAP = 50_000;
 
 export function defaultSessionsDir(): string {
   return path.join(os.homedir(), '.claude', 'projects');
@@ -147,6 +150,40 @@ function summarizeTool(name: string, input: Record<string, unknown>): string | u
       }
     }
   }
+}
+
+/**
+ * Old/new string pairs from Edit and MultiEdit inputs, for the diff view.
+ * Tolerates partial input (truncated transcripts): pairs with a missing or
+ * non-string side are dropped. Returns undefined for every other tool so
+ * they carry no extra payload.
+ */
+function extractEditDiffs(name: string, input: Record<string, unknown>): EditDiff[] | undefined {
+  if (name === 'Edit') {
+    if (typeof input.old_string !== 'string' || typeof input.new_string !== 'string') {
+      return undefined;
+    }
+    return [
+      {
+        oldText: truncate(input.old_string, EDIT_DIFF_CAP),
+        newText: truncate(input.new_string, EDIT_DIFF_CAP),
+      },
+    ];
+  }
+  if (name === 'MultiEdit') {
+    if (!Array.isArray(input.edits)) return undefined;
+    const diffs: EditDiff[] = [];
+    for (const e of input.edits) {
+      if (isRecord(e) && typeof e.old_string === 'string' && typeof e.new_string === 'string') {
+        diffs.push({
+          oldText: truncate(e.old_string, EDIT_DIFF_CAP),
+          newText: truncate(e.new_string, EDIT_DIFF_CAP),
+        });
+      }
+    }
+    return diffs.length > 0 ? diffs : undefined;
+  }
+  return undefined;
 }
 
 /** Map a tool name to the file operation it implies, if any. */
@@ -323,6 +360,7 @@ class SessionBuilder {
               name: block.name,
               filePath: typeof input.file_path === 'string' ? input.file_path : undefined,
               summary: summarizeTool(block.name, input),
+              edits: extractEditDiffs(block.name, input),
             };
             if (tool.filePath) this.touchFile(tool.filePath, block.name);
             if (tool.id) this.toolUseById.set(tool.id, tool);

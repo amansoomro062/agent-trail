@@ -76,6 +76,14 @@ export interface SessionSummary {
   mtime: number;
 }
 
+/** One old/new string pair from an Edit or MultiEdit tool call. */
+export interface EditDiff {
+  /** Text being replaced (input old_string). */
+  oldText: string;
+  /** Replacement text (input new_string). */
+  newText: string;
+}
+
 /** A single tool invocation inside an assistant message. */
 export interface ToolEvent {
   /** tool_use block id (toolu_...). */
@@ -86,6 +94,11 @@ export interface ToolEvent {
   filePath?: string;
   /** Short human-readable summary (command, url, prompt, etc.). */
   summary?: string;
+  /**
+   * Old/new string pairs, populated only for Edit (one pair) and MultiEdit
+   * (one per edit). Absent for every other tool so the model stays small.
+   */
+  edits?: EditDiff[];
   /** Preview of the matching tool_result (truncated), filled in post-pass. */
   resultPreview?: string;
   /** True if the matching tool_result had is_error set. */

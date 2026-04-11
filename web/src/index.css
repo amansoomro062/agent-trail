@@ -51,6 +51,7 @@
   --danger-wash: #fdeded;
   --danger-line: #f5c9c9;
   --good: #0ca30c;
+  --good-wash: #e8f6e8;
 
   --shadow-sm: 0 1px 2px rgb(16 17 20 / 0.05), 0 1px 1px rgb(16 17 20 / 0.03);
   --shadow-md: 0 1px 3px rgb(16 17 20 / 0.06), 0 6px 16px -6px rgb(16 17 20 / 0.10);
@@ -93,6 +94,7 @@
   --danger-wash: #2e1d1f;
   --danger-line: #4d2b2d;
   --good: #3ec13e;
+  --good-wash: #1d2e1e;
 
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-md: 0 1px 3px rgb(0 0 0 / 0.45), 0 6px 16px -6px rgb(0 0 0 / 0.5);
@@ -127,6 +129,7 @@
   --color-danger-wash: var(--danger-wash);
   --color-danger-line: var(--danger-line);
   --color-good: var(--good);
+  --color-good-wash: var(--good-wash);
 }
 
 @theme {

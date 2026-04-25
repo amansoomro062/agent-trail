@@ -4,6 +4,7 @@
  *   GET /api/sessions      → SessionSummary[]  (sorted by recency)
  *   GET /api/sessions/:id  → SessionDetail     (full message timeline)
  *   GET /api/search?q=...  → SearchHit[]       (case-insensitive substring)
+ *   GET /api/events        → SSE stream        (session change notifications)
  *   everything else        → static files from web/dist (SPA fallback)
  */
 
@@ -14,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import type { Corpus } from './parser.js';
 import { parseSessionDetail } from './parser.js';
 import type { SearchHit } from './types.js';
+import type { SessionChange } from './watch.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -30,6 +32,8 @@ const MIME: Record<string, string> = {
 const MAX_SEARCH_RESULTS = 50;
 /** chars of context shown around a search match */
 const SNIPPET_RADIUS = 120;
+/** default SSE keep-alive interval; browsers drop idle streams around 30-60s */
+const SSE_HEARTBEAT_MS = 25_000;
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -95,6 +99,10 @@ export interface ServerOptions {
   webDist: string;
   port: number; // 0 → pick a free port
   host?: string;
+  /** Live tail source; /api/events is served only when present. */
+  live?: { subscribe(fn: (change: SessionChange) => void): () => void };
+  /** SSE keep-alive interval in ms (tests shrink this). */
+  sseHeartbeatMs?: number;
 }
 
 export function defaultWebDist(): string {
@@ -133,6 +141,36 @@ export function startServer(opts: ServerOptions): Promise<http.Server> {
         if (pathname === '/api/search') {
           const q = url.searchParams.get('q') ?? '';
           sendJson(res, 200, { query: q, results: searchCorpus(corpus, q) });
+          return;
+        }
+
+        if (pathname === '/api/events') {
+          if (!opts.live) {
+            sendJson(res, 404, { error: 'not found' });
+            return;
+          }
+          res.writeHead(200, {
+            'content-type': 'text/event-stream; charset=utf-8',
+            'cache-control': 'no-cache, no-transform',
+            connection: 'keep-alive',
+            // ask proxies not to buffer the stream
+            'x-accel-buffering': 'no',
+          });
+          res.write(': connected\n\n');
+          const live = opts.live;
+          const send = (change: SessionChange) => {
+            if (!res.destroyed) {
+              res.write(`event: session\ndata: ${JSON.stringify(change)}\n\n`);
+            }
+          };
+          const unsubscribe = live.subscribe(send);
+          const heartbeat = setInterval(() => {
+            if (!res.destroyed) res.write(': heartbeat\n\n');
+          }, opts.sseHeartbeatMs ?? SSE_HEARTBEAT_MS);
+          req.on('close', () => {
+            clearInterval(heartbeat);
+            unsubscribe();
+          });
           return;
         }
 

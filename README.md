@@ -57,6 +57,8 @@ agenttrail --no-open                # don't open the browser
 - Token usage: per-session input/output totals, deduplicated across streaming
   chunks, with cache reads reported separately so they don't inflate the
   headline number.
+- Live tail: while a session is still being written, the open session and the
+  sidebar update in place over SSE, no refresh needed.
 - No config, no database, no accounts. Parses transcripts directly, streams
   line by line, tolerates malformed data.
 
@@ -80,7 +82,7 @@ calls.
 - [ ] Cost sidebar (per-session $ estimates)
 - [x] Diff view for Edit/MultiEdit operations
 - [ ] Optional cloud sync / team sharing
-- [ ] Live tail of in-progress sessions
+- [x] Live tail of in-progress sessions
 
 ## Development
 

@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { exec } from 'node:child_process';
 import { defaultSessionsDir, parseCorpus } from './parser.js';
 import { defaultWebDist, startServer } from './server.js';
+import { TranscriptWatcher } from './watch.js';
 
 interface CliOptions {
   dir: string;
@@ -108,10 +109,17 @@ async function main(): Promise<void> {
     console.log('            or point --dir at a directory containing <project>/<session>.jsonl files.');
   }
 
+  const watcher = new TranscriptWatcher({ sessionsDir: opts.dir, corpus });
+  watcher.start();
+  if (!watcher.active) {
+    console.log('agenttrail: live tail unavailable on this platform, serving a static snapshot');
+  }
+
   const server = await startServer({
     corpus,
     webDist: defaultWebDist(),
     port: opts.port,
+    live: watcher,
   });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : opts.port;
@@ -122,6 +130,7 @@ async function main(): Promise<void> {
   if (opts.open) openBrowser(url);
 
   const shutdown = () => {
+    watcher.stop();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 500).unref();
   };

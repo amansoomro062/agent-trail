@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SessionDetail, SessionSummary } from '../types';
 import { durationText, formatTokens, shortModel, clockTime, relativeTime } from '../format';
 import { toolCategory } from '../viz';
@@ -8,7 +8,8 @@ import FilesPanel from './FilesPanel';
 import SessionDigest from './SessionDigest';
 import Timeline from './Timeline';
 
-const LIVE_WINDOW_MS = 15 * 60 * 1000;
+/** How long the Live pill stays up after the last update for the session. */
+const LIVE_PILL_MS = 5000;
 
 /** Derive the strip from the message timeline: one mark per event. */
 function buildBands(detail: SessionDetail): StripBand[] {
@@ -54,17 +55,33 @@ export default function SessionView({
   summary,
   detail,
   loading,
+  lastChange,
   onProject,
   onHome,
 }: {
   summary: SessionSummary;
   detail: SessionDetail | null;
   loading: boolean;
+  /** ms epoch of the last live update for this session, 0 if none. */
+  lastChange: number;
   onProject: (path: string) => void;
   onHome: () => void;
 }) {
   const [tab, setTab] = useState<Tab>('summary');
   const bands = useMemo(() => (detail ? buildBands(detail) : []), [detail]);
+
+  // The Live pill only shows while updates are actually arriving, then
+  // fades out after a quiet stretch. No polling, no blinking.
+  const [live, setLive] = useState(false);
+  useEffect(() => {
+    if (!lastChange) {
+      setLive(false);
+      return;
+    }
+    setLive(true);
+    const t = setTimeout(() => setLive(false), LIVE_PILL_MS);
+    return () => clearTimeout(t);
+  }, [lastChange]);
 
   const scrollTo = (uuid: string) => {
     document.getElementById(`ev-${uuid}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -77,8 +94,6 @@ export default function SessionView({
     requestAnimationFrame(() => requestAnimationFrame(() => scrollTo(uuid)));
   }, []);
 
-  const end = summary.endTime ?? summary.startTime;
-  const live = end !== null && Date.now() - new Date(end).getTime() < LIVE_WINDOW_MS;
   // Cache reads are excluded from the headline figure - see HomeDashboard.
   const tokensIn = summary.tokens?.input ?? 0;
   const tokensOut = summary.tokens?.output ?? 0;

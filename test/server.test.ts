@@ -1,9 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
+import type { AddressInfo } from 'node:net';
 
 import { parseCorpus } from '../src/parser.js';
-import { searchCorpus } from '../src/server.js';
+import { searchCorpus, startServer } from '../src/server.js';
+import type { SessionChange } from '../src/watch.js';
 import { assistantEvent, tempDir, textBlock, toolUse, userEvent, writeTranscript } from './helpers.js';
 
 async function corpusWith(entries: unknown[], name = 'sess-1') {
@@ -91,5 +93,98 @@ describe('searchCorpus', () => {
     assert.equal(hit.projectName, 'demo');
     assert.equal(hit.projectPath, '/Users/dev/code/demo');
     assert.ok(hit.timestamp);
+  });
+});
+
+describe('SSE /api/events', () => {
+  it('streams injected changes with the right headers and a heartbeat', async () => {
+    const corpus = await corpusWith([userEvent({ content: 'hi' })]);
+    let emit: ((change: SessionChange) => void) | undefined;
+    let unsubscribed = false;
+    const live = {
+      subscribe(fn: (change: SessionChange) => void) {
+        emit = fn;
+        return () => {
+          unsubscribed = true;
+        };
+      },
+    };
+    const server = await startServer({
+      corpus,
+      webDist: path.join(tempDir(), 'no-dist'),
+      port: 0,
+      live,
+      sseHeartbeatMs: 30,
+    });
+    try {
+      const { port } = server.address() as AddressInfo;
+      const res = await fetch(`http://127.0.0.1:${port}/api/events`);
+      assert.equal(res.status, 200);
+      assert.match(res.headers.get('content-type') ?? '', /text\/event-stream/);
+      assert.equal(res.headers.get('cache-control'), 'no-cache, no-transform');
+      assert.ok(res.body, 'stream body present');
+
+      // accumulate the stream in the background, then poll the buffer
+      const decoder = new TextDecoder();
+      let acc = '';
+      const reader = res.body.getReader();
+      const pump = (async () => {
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            acc += decoder.decode(value, { stream: true });
+          }
+        } catch {
+          // cancelled below; nothing to do
+        }
+      })();
+      const readUntil = async (needle: string, timeoutMs = 2000) => {
+        const deadline = Date.now() + timeoutMs;
+        while (!acc.includes(needle)) {
+          assert.ok(
+            Date.now() < deadline,
+            `timed out waiting for ${JSON.stringify(needle)} in ${JSON.stringify(acc)}`,
+          );
+          await new Promise((r) => setTimeout(r, 10));
+        }
+      };
+
+      await readUntil(': connected');
+      assert.ok(emit, 'client subscribed');
+      emit({ sessionId: 'sess-1', file: '/tmp/sess-1.jsonl', kind: 'updated' });
+      await readUntil('event: session');
+      await readUntil('"sessionId":"sess-1"');
+      await readUntil(': heartbeat');
+
+      await reader.cancel();
+      await pump;
+      const deadline = Date.now() + 1000;
+      while (!unsubscribed && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.ok(unsubscribed, 'disconnect unsubscribes the live listener');
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('returns 404 when no live source is configured', async () => {
+    const corpus = await corpusWith([userEvent({ content: 'hi' })]);
+    const server = await startServer({
+      corpus,
+      webDist: path.join(tempDir(), 'no-dist'),
+      port: 0,
+    });
+    try {
+      const { port } = server.address() as AddressInfo;
+      const res = await fetch(`http://127.0.0.1:${port}/api/events`);
+      assert.equal(res.status, 404);
+      await res.text();
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });

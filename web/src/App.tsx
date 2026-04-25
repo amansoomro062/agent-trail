@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionDetail, SessionSummary } from './types';
-import { fetchSession, fetchSessions } from './api';
+import { fetchSession, fetchSessions, subscribeSessionChanges } from './api';
 import Sidebar from './components/Sidebar';
 import SearchBar from './components/SearchBar';
 import HomeDashboard from './components/HomeDashboard';
@@ -20,8 +20,12 @@ export default function App() {
   const [view, setView] = useState<View>({ kind: 'home' });
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  /** session id → ms epoch of its last live change, drives the Live pill. */
+  const [lastChangeAt, setLastChangeAt] = useState<Record<string, number>>({});
 
   const selectedId = view.kind === 'session' ? view.id : null;
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     fetchSessions()
@@ -40,6 +44,37 @@ export default function App() {
       .catch(() => setDetail(null))
       .finally(() => setDetailLoading(false));
   }, [selectedId]);
+
+  // Live tail: refetch what a change touches. Bursts collapse into one
+  // trailing refetch each for the list and the open session.
+  useEffect(() => {
+    let listTimer: ReturnType<typeof setTimeout> | null = null;
+    let detailTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeSessionChanges((change) => {
+      setLastChangeAt((m) => ({ ...m, [change.sessionId]: Date.now() }));
+      if (listTimer) clearTimeout(listTimer);
+      listTimer = setTimeout(() => {
+        fetchSessions()
+          .then(setSessions)
+          .catch(() => {});
+      }, 500);
+      if (selectedIdRef.current === change.sessionId) {
+        if (detailTimer) clearTimeout(detailTimer);
+        detailTimer = setTimeout(() => {
+          fetchSession(change.sessionId)
+            .then((d) => {
+              if (selectedIdRef.current === change.sessionId) setDetail(d);
+            })
+            .catch(() => {});
+        }, 400);
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (listTimer) clearTimeout(listTimer);
+      if (detailTimer) clearTimeout(detailTimer);
+    };
+  }, []);
 
   const toTop = () => document.getElementById('main-scroll')?.scrollTo({ top: 0 });
 
@@ -126,6 +161,7 @@ export default function App() {
               summary={summary}
               detail={detail && detail.id === summary.id ? detail : null}
               loading={detailLoading}
+              lastChange={lastChangeAt[summary.id] ?? 0}
               onProject={openProject}
               onHome={goHome}
             />

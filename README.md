@@ -1,9 +1,10 @@
 # agenttrail
 
-Local-first CLI + web dashboard for reviewing Claude Code session transcripts.
+Local-first CLI + web dashboard for reviewing agent session transcripts.
 
-Claude Code writes every session as a JSONL file under `~/.claude/projects`.
-agenttrail reads those files and turns them into something you can actually
+It reads Claude Code sessions from `~/.claude/projects`, Codex CLI rollouts
+from `~/.codex/sessions`, and Cursor workspace chats from Cursor's
+workspaceStorage, and turns them into something you can actually
 review: sessions, full conversation timelines, every file the agent touched,
 every edit it made, and full-text search across all of it.
 
@@ -24,14 +25,19 @@ every edit it made, and full-text search across all of it.
 npx agenttrail
 ```
 
-This scans `~/.claude/projects`, starts a local server and opens the dashboard
-in your browser.
+This scans the default transcript roots (`~/.claude/projects`,
+`~/.codex/sessions`, Cursor's workspaceStorage, whichever exist), starts a
+local server and opens the dashboard in your browser.
 
 ```bash
 agenttrail --port 3000              # serve on a specific port
-agenttrail --dir /path/to/projects  # read transcripts from somewhere else
+agenttrail --dir /path/to/projects  # read Claude Code transcripts from somewhere else
 agenttrail --no-open                # don't open the browser
 ```
+
+Cursor support reads the workspace SQLite state with the `sqlite3` CLI in
+read-only mode; if `sqlite3` is not on the PATH, Cursor workspaces are
+skipped and everything else keeps working.
 
 ## Features
 
@@ -65,10 +71,13 @@ agenttrail --no-open                # don't open the browser
 ## How it works
 
 Claude Code stores each session as a JSONL transcript at
-`~/.claude/projects/<slugified-cwd>/<session-uuid>.jsonl`. agenttrail streams
-those files, normalizes the events (`user` / `assistant` messages, `tool_use`
-/ `tool_result` blocks, token usage) into a compact model, and serves it over
-a small local HTTP API to a React dashboard. Nothing leaves your machine.
+`~/.claude/projects/<slugified-cwd>/<session-uuid>.jsonl`, and Codex CLI at
+`~/.codex/sessions/<yyyy>/<mm>/<dd>/rollout-*.jsonl`. Cursor keeps one SQLite
+database per workspace in its workspaceStorage directory. agenttrail parses
+each format with a per-provider reader, normalizes the events (`user` /
+`assistant` messages, tool calls, token usage where the provider records it)
+into one compact model, and serves it over a small local HTTP API to a React
+dashboard. Nothing leaves your machine.
 
 ## Privacy
 
@@ -78,7 +87,7 @@ calls.
 
 ## Roadmap
 
-- [ ] Cursor / Codex / other agent transcript ingestion
+- [x] Cursor / Codex / other agent transcript ingestion
 - [ ] Cost sidebar (per-session $ estimates)
 - [x] Diff view for Edit/MultiEdit operations
 - [ ] Optional cloud sync / team sharing

@@ -44,10 +44,14 @@ export function toolCategory(name: string): ToolCategory {
     case 'Edit':
     case 'MultiEdit':
     case 'NotebookEdit':
+    case 'apply_patch':
       return 'edit';
     case 'Bash':
     case 'BashOutput':
     case 'KillShell':
+    case 'exec_command':
+    case 'shell_command':
+    case 'write_stdin':
       return 'command';
     case 'Read':
       return 'read';
@@ -55,6 +59,7 @@ export function toolCategory(name: string): ToolCategory {
     case 'Glob':
     case 'WebSearch':
     case 'WebFetch':
+    case 'web_search_call':
       return 'search';
     default:
       return 'task';

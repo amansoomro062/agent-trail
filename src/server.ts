@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Corpus } from './parser.js';
-import { parseSessionDetail } from './parser.js';
+import { parseSessionDetailFor } from './corpus.js';
 import type { SearchHit } from './types.js';
 import type { SessionChange } from './watch.js';
 
@@ -128,12 +128,11 @@ export function startServer(opts: ServerOptions): Promise<http.Server> {
         const sessionMatch = /^\/api\/sessions\/([^/]+)$/.exec(pathname);
         if (sessionMatch) {
           const id = decodeURIComponent(sessionMatch[1]);
-          const file = corpus.filesById.get(id);
-          if (!file) {
+          const detail = await parseSessionDetailFor(corpus, id);
+          if (!detail) {
             sendJson(res, 404, { error: 'session not found' });
             return;
           }
-          const detail = await parseSessionDetail(file);
           sendJson(res, 200, detail);
           return;
         }

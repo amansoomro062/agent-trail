@@ -26,8 +26,11 @@ export interface ToolTally {
   total: number;
 }
 
+export type ProviderName = 'claude' | 'codex' | 'cursor';
+
 export interface SessionSummary {
   id: string;
+  provider: ProviderName;
   projectPath: string;
   projectName: string;
   file: string;

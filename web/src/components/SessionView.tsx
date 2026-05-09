@@ -130,6 +130,9 @@ export default function SessionView({
               >
                 {summary.projectName}
               </h1>
+              <span className="shrink-0 rounded border border-line px-1.5 py-px text-[11px] text-ink-3">
+                {summary.provider}
+              </span>
               {live && (
                 <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-brand-wash px-2 py-0.5 text-[11px] font-medium text-brand-text">
                   <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" />

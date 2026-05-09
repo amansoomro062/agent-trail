@@ -119,11 +119,19 @@ function toolResultText(content: unknown): string {
 }
 
 /** Short human-readable one-liner for a tool call. */
-function summarizeTool(name: string, input: Record<string, unknown>): string | undefined {
+export function summarizeTool(name: string, input: Record<string, unknown>): string | undefined {
   const s = (v: unknown) => (typeof v === 'string' ? truncate(v.replace(/\s+/g, ' ').trim(), TOOL_SUMMARY_CAP) : undefined);
   switch (name) {
     case 'Bash':
       return s(input.command);
+    // Codex CLI exec tools carry {cmd, workdir, ...}
+    case 'exec_command':
+    case 'shell_command': {
+      const cmd = s(input.cmd) ?? s(input.command);
+      if (cmd) return cmd;
+      if (Array.isArray(input.command)) return s(input.command.join(' '));
+      return undefined;
+    }
     case 'Read':
     case 'Edit':
     case 'Write':
@@ -133,6 +141,7 @@ function summarizeTool(name: string, input: Record<string, unknown>): string | u
     case 'WebFetch':
       return s(input.url);
     case 'WebSearch':
+    case 'web_search_call':
       return s(input.query);
     case 'Grep':
     case 'Glob':
@@ -142,6 +151,8 @@ function summarizeTool(name: string, input: Record<string, unknown>): string | u
       return s(input.description) ?? s(input.prompt);
     case 'Skill':
       return s(input.skill);
+    case 'update_plan':
+      return undefined;
     default: {
       try {
         return truncate(JSON.stringify(input), 120);
@@ -213,10 +224,16 @@ export function toolCategory(name: string): ToolCategory {
     case 'Edit':
     case 'MultiEdit':
     case 'NotebookEdit':
+    // Codex CLI patch tool
+    case 'apply_patch':
       return 'edit';
     case 'Bash':
     case 'BashOutput':
     case 'KillShell':
+    // Codex CLI exec tools
+    case 'exec_command':
+    case 'shell_command':
+    case 'write_stdin':
       return 'command';
     case 'Read':
       return 'read';
@@ -224,6 +241,8 @@ export function toolCategory(name: string): ToolCategory {
     case 'Glob':
     case 'WebSearch':
     case 'WebFetch':
+    // Codex CLI web search
+    case 'web_search_call':
       return 'search';
     default:
       return 'task';
@@ -466,6 +485,7 @@ class SessionBuilder {
     const projectName = path.basename(this.projectPath || '') || this.projectPath || 'unknown';
     return {
       id: this.id,
+      provider: 'claude',
       projectPath: this.projectPath,
       projectName,
       file: this.file,

@@ -10,12 +10,14 @@
 
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
-import { defaultSessionsDir, parseCorpus } from './parser.js';
+import { defaultRoots, parseCorpusMulti, watchedRoots } from './corpus.js';
+import { cursorSqliteAvailable } from './cursor.js';
 import { defaultWebDist, startServer } from './server.js';
 import { TranscriptWatcher } from './watch.js';
 
 interface CliOptions {
-  dir: string;
+  /** Explicit Claude transcripts dir from --dir; null means scan defaults. */
+  dir: string | null;
   port: number;
   open: boolean;
   help: boolean;
@@ -24,7 +26,7 @@ interface CliOptions {
 const DEFAULT_PORT = 4820;
 
 function parseArgs(argv: string[]): CliOptions {
-  const opts: CliOptions = { dir: defaultSessionsDir(), port: DEFAULT_PORT, open: true, help: false };
+  const opts: CliOptions = { dir: null, port: DEFAULT_PORT, open: true, help: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     switch (arg) {
@@ -71,7 +73,8 @@ Usage:
   agenttrail [options]
 
 Options:
-  -d, --dir <path>   session transcripts dir (default: ~/.claude/projects)
+  -d, --dir <path>   Claude Code transcripts dir (default: scan the Claude,
+                     Codex and Cursor default roots, whichever exist)
   -p, --port <n>     port to serve on (default: ${DEFAULT_PORT}, falls back to a free port)
       --no-open      don't open the browser automatically
   -h, --help         show this help
@@ -97,19 +100,27 @@ async function main(): Promise<void> {
     return;
   }
 
-  process.stderr.write(`agenttrail: scanning ${opts.dir} …\n`);
+  // --dir points at one Claude-layout transcripts dir; without it, scan the
+  // Claude, Codex and Cursor default roots, whichever exist on this machine.
+  const roots = opts.dir !== null ? { claude: opts.dir } : await defaultRoots();
+  if (roots.cursor && !(await cursorSqliteAvailable())) {
+    console.log('agenttrail: sqlite3 not found, skipping Cursor workspaces');
+    delete roots.cursor;
+  }
+
+  process.stderr.write('agenttrail: scanning transcripts …\n');
   const t0 = Date.now();
-  const corpus = await parseCorpus(opts.dir);
+  const corpus = await parseCorpusMulti(roots);
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(
     `agenttrail: found ${corpus.sessions.length} session${corpus.sessions.length === 1 ? '' : 's'} in ${elapsed}s`,
   );
   if (corpus.sessions.length === 0) {
-    console.log('agenttrail: no transcripts found - run some Claude Code sessions first,');
+    console.log('agenttrail: no transcripts found - run some agent sessions first,');
     console.log('            or point --dir at a directory containing <project>/<session>.jsonl files.');
   }
 
-  const watcher = new TranscriptWatcher({ sessionsDir: opts.dir, corpus });
+  const watcher = new TranscriptWatcher({ roots: watchedRoots(roots), corpus });
   watcher.start();
   if (!watcher.active) {
     console.log('agenttrail: live tail unavailable on this platform, serving a static snapshot');

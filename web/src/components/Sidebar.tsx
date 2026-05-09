@@ -172,6 +172,12 @@ export default function Sidebar({
                       <span>{s.filesTouched.length} files</span>
                     </>
                   )}
+                  {s.provider !== 'claude' && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{s.provider}</span>
+                    </>
+                  )}
                   {s.tools.errors > 0 && (
                     <>
                       <span aria-hidden="true">·</span>

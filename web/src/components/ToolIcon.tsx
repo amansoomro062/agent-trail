@@ -59,12 +59,13 @@ const GLYPHS: Record<string, JSX.Element> = {
 
 function glyphFor(name: string): JSX.Element {
   if (name === 'Write') return GLYPHS.write;
-  if (['Edit', 'MultiEdit', 'NotebookEdit'].includes(name)) return GLYPHS.edit;
+  if (['Edit', 'MultiEdit', 'NotebookEdit', 'apply_patch'].includes(name)) return GLYPHS.edit;
   if (name === 'Read') return GLYPHS.read;
-  if (['Bash', 'BashOutput', 'KillShell'].includes(name)) return GLYPHS.bash;
+  if (['Bash', 'BashOutput', 'KillShell', 'exec_command', 'shell_command', 'write_stdin'].includes(name))
+    return GLYPHS.bash;
   if (['Grep', 'Glob', 'WebSearch'].includes(name)) return GLYPHS.search;
-  if (name === 'WebFetch') return GLYPHS.web;
-  if (['Task', 'Agent', 'Skill'].includes(name)) return GLYPHS.task;
+  if (['WebFetch', 'web_search_call'].includes(name)) return GLYPHS.web;
+  if (['Task', 'Agent', 'Skill', 'update_plan'].includes(name)) return GLYPHS.task;
   return GLYPHS.other;
 }
 

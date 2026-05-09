@@ -3,12 +3,22 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { parseCorpus } from '../src/parser.js';
+import { parseCorpus, parseTranscript } from '../src/parser.js';
 import { Debouncer, TranscriptWatcher } from '../src/watch.js';
-import type { SessionChange } from '../src/watch.js';
+import type { SessionChange, WatchedRoot } from '../src/watch.js';
 import { tempDir, userEvent, writeTranscript } from './helpers.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** A Claude-layout watched root for the fixtures below. */
+function claudeRoot(dir: string): WatchedRoot {
+  return {
+    dir,
+    depth: 2,
+    suffix: '.jsonl',
+    parse: async (file) => [await parseTranscript(file, { withMessages: false })],
+  };
+}
 
 describe('Debouncer', () => {
   it('fires once for a burst of schedules on one key', async () => {
@@ -76,7 +86,7 @@ describe('TranscriptWatcher', () => {
       userEvent({ content: 'start', timestamp: '2026-01-30T10:00:00.000Z' }),
     ]);
     const corpus = await parseCorpus(root);
-    const watcher = new TranscriptWatcher({ sessionsDir: root, corpus, debounceMs: 30 });
+    const watcher = new TranscriptWatcher({ roots: [claudeRoot(root)], corpus, debounceMs: 30 });
     watcher.start();
     if (!watcher.active) {
       watcher.stop();
@@ -109,7 +119,7 @@ describe('TranscriptWatcher', () => {
     const root = tempDir();
     writeTranscript(path.join(root, 'proj'), 'sess-old', [userEvent({ content: 'old' })]);
     const corpus = await parseCorpus(root);
-    const watcher = new TranscriptWatcher({ sessionsDir: root, corpus, debounceMs: 30 });
+    const watcher = new TranscriptWatcher({ roots: [claudeRoot(root)], corpus, debounceMs: 30 });
     watcher.start();
     if (!watcher.active) {
       watcher.stop();

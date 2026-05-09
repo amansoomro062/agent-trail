@@ -47,10 +47,15 @@ export interface ToolTally {
   total: number;
 }
 
+/** Agent tools whose transcripts agenttrail can ingest. */
+export type ProviderName = 'claude' | 'codex' | 'cursor';
+
 /** Lightweight session metadata, shown in the sidebar list. */
 export interface SessionSummary {
   /** Session UUID (filename without .jsonl). */
   id: string;
+  /** Which agent tool produced this session. */
+  provider: ProviderName;
   /** Working directory of the session (from event `cwd` fields). */
   projectPath: string;
   /** Basename of projectPath, for display. */

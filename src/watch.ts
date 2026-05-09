@@ -1,11 +1,12 @@
 /**
  * watch.ts - live tail of in-progress transcripts.
  *
- * Watches the sessions dir for .jsonl changes with fs.watch(recursive),
- * debounces the write bursts Claude Code produces while streaming, re-parses
- * the changed transcript once writes go quiet, and folds the fresh summary
- * back into the shared corpus. Subscribers get a SessionChange only when the
- * served data actually changed, not on every write.
+ * Watches every configured transcript root with fs.watch(recursive),
+ * debounces the write bursts agents produce while streaming, re-parses the
+ * changed file once writes go quiet (through the root's provider parse
+ * function), and folds the fresh summaries back into the shared corpus.
+ * Subscribers get a SessionChange only when the served data actually
+ * changed, not on every write.
  *
  * Recursive watch needs macOS, Windows or Node 20+ on Linux. Where it is
  * unavailable the watcher simply never becomes active and the dashboard
@@ -15,18 +16,29 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Corpus } from './parser.js';
-import { parseTranscript } from './parser.js';
-import type { SessionSummary } from './types.js';
+import type { SearchIndexEntry, SessionSummary } from './types.js';
 
 export interface SessionChange {
   sessionId: string;
   /** Transcript file that changed (absolute path). */
   file: string;
-  /** 'added' for a newly discovered transcript, 'updated' otherwise. */
+  /** 'added' for a newly discovered session, 'updated' otherwise. */
   kind: 'added' | 'updated';
 }
 
 export type ChangeListener = (change: SessionChange) => void;
+
+/** One transcript root to watch, with the provider's re-parse function. */
+export interface WatchedRoot {
+  /** Directory to watch recursively. */
+  dir: string;
+  /** Path segments below dir that make a transcript (claude 2, codex 4, cursor 2). */
+  depth: number;
+  /** Transcript filename suffix ('.jsonl', '.vscdb'). */
+  suffix: string;
+  /** Re-parse one changed file into its session(s). */
+  parse(file: string): Promise<Array<{ summary: SessionSummary; indexEntries: SearchIndexEntry[] }>>;
+}
 
 /** Trailing-edge debouncer keyed by caller-chosen ids (one timer per key). */
 export class Debouncer {
@@ -69,14 +81,14 @@ function byRecency(a: SessionSummary, b: SessionSummary): number {
 }
 
 export interface WatcherOptions {
-  sessionsDir: string;
+  roots: WatchedRoot[];
   corpus: Corpus;
   /** Quiet period after the last write before re-parsing (default 300ms). */
   debounceMs?: number;
 }
 
 export class TranscriptWatcher {
-  private watcher: fs.FSWatcher | null = null;
+  private watchers: fs.FSWatcher[] = [];
   private listeners = new Set<ChangeListener>();
   private debouncer: Debouncer;
   /** Fingerprint per session id of the data currently in the corpus. */
@@ -89,9 +101,9 @@ export class TranscriptWatcher {
     }
   }
 
-  /** True while fs.watch is running; false on platforms without support. */
+  /** True while at least one root is being watched. */
   get active(): boolean {
-    return this.watcher !== null;
+    return this.watchers.length > 0;
   }
 
   subscribe(fn: ChangeListener): () => void {
@@ -102,45 +114,54 @@ export class TranscriptWatcher {
   }
 
   start(): void {
-    if (this.watcher) return;
-    try {
-      this.watcher = fs.watch(this.opts.sessionsDir, { recursive: true }, (_event, filename) => {
-        if (typeof filename !== 'string') return;
-        // transcripts live exactly one level down: <project>/<session>.jsonl
-        const parts = filename.split(path.sep);
-        if (parts.length !== 2 || !parts[1].endsWith('.jsonl')) return;
-        const file = path.join(this.opts.sessionsDir, filename);
-        this.debouncer.schedule(file, () => void this.refresh(file));
-      });
-      this.watcher.on('error', () => this.stop());
-    } catch {
-      // recursive watch unsupported (or the dir vanished): static mode
-      this.watcher = null;
+    if (this.watchers.length > 0) return;
+    for (const root of this.opts.roots) {
+      try {
+        const watcher = fs.watch(root.dir, { recursive: true }, (_event, filename) => {
+          if (typeof filename !== 'string') return;
+          const parts = filename.split(path.sep);
+          if (parts.length !== root.depth || !parts[parts.length - 1].endsWith(root.suffix)) return;
+          const file = path.join(root.dir, filename);
+          this.debouncer.schedule(file, () => void this.refresh(root, file));
+        });
+        watcher.on('error', () => {
+          watcher.close();
+          this.watchers = this.watchers.filter((w) => w !== watcher);
+        });
+        this.watchers.push(watcher);
+      } catch {
+        // recursive watch unsupported for this root: skip it, keep the rest
+      }
     }
   }
 
   stop(): void {
-    this.watcher?.close();
-    this.watcher = null;
+    for (const w of this.watchers) w.close();
+    this.watchers = [];
     this.debouncer.dispose();
   }
 
-  /** Re-parse one transcript and fold it into the corpus if it changed. */
-  private async refresh(file: string): Promise<void> {
+  /** Re-parse one changed file and fold its sessions into the corpus. */
+  private async refresh(root: WatchedRoot, file: string): Promise<void> {
     try {
       await fs.promises.stat(file);
     } catch {
       // deleted mid-flight; keep serving the last good parse
       return;
     }
-    let parsed: Awaited<ReturnType<typeof parseTranscript>>;
+    let parsed: Array<{ summary: SessionSummary; indexEntries: SearchIndexEntry[] }>;
     try {
-      parsed = await parseTranscript(file, { withMessages: false });
+      parsed = await root.parse(file);
     } catch {
       // unreadable right now; the next write triggers another attempt
       return;
     }
-    const { summary, indexEntries } = parsed;
+    for (const { summary, indexEntries } of parsed) {
+      this.fold(summary, indexEntries, file);
+    }
+  }
+
+  private fold(summary: SessionSummary, indexEntries: SearchIndexEntry[], file: string): void {
     const fp = summaryFingerprint(summary);
     if (this.fingerprints.get(summary.id) === fp) return;
 

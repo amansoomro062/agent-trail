@@ -58,6 +58,8 @@ skipped and everything else keeps working.
   so they don't bury the conversation.
 - Session fingerprints: every sidebar row carries a small bar of its
   edit/command/read mix, so the list reads as shapes rather than text.
+- Project filter: narrow the sidebar session list to one or several projects,
+  and clear it again in one click.
 - Files touched: every file created, edited or read, ranked by how often.
 - Full-text search: `⌘K` from anywhere, arrow keys and Enter to jump.
 - Token usage: per-session input/output totals, deduplicated across streaming

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionSummary } from '../types';
 import { relativeTime } from '../format';
 import { MixSpark } from './charts';
@@ -24,17 +24,48 @@ export default function Sidebar({
 }: Props) {
   const [filter, setFilter] = useState('');
   const [showProjects, setShowProjects] = useState(true);
+  /** Projects the session list is narrowed to; empty set means all. */
+  const [projectFilter, setProjectFilter] = useState<ReadonlySet<string>>(new Set());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // close the project picker on outside click or Escape, same as the search palette
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pickerOpen]);
+
+  const toggleProject = (path: string) => {
+    setProjectFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return sessions;
     return sessions.filter(
       (s) =>
-        s.projectName.toLowerCase().includes(q) ||
-        (s.firstUserMessage ?? '').toLowerCase().includes(q) ||
-        s.id.toLowerCase().includes(q),
+        (projectFilter.size === 0 || projectFilter.has(s.projectPath)) &&
+        (!q ||
+          s.projectName.toLowerCase().includes(q) ||
+          (s.firstUserMessage ?? '').toLowerCase().includes(q) ||
+          s.id.toLowerCase().includes(q)),
     );
-  }, [sessions, filter]);
+  }, [sessions, filter, projectFilter]);
 
   /** Distinct projects, keyed by path - two projects can share a basename. */
   const projects = useMemo(() => {
@@ -117,13 +148,88 @@ export default function Sidebar({
           <span className="eyebrow">Sessions</span>
           <span className="num text-[12px] text-ink-3">{visible.length}</span>
         </div>
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter sessions"
-          aria-label="Filter sessions"
-          className="w-full rounded-lg border border-line bg-sunken px-2.5 py-1.5 text-[13px] text-ink placeholder-ink-3 outline-none transition-colors duration-150 focus:border-line-strong focus:bg-card"
-        />
+        <div ref={pickerRef} className="relative">
+          <div className="flex items-stretch gap-1.5">
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter sessions"
+              aria-label="Filter sessions"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-sunken px-2.5 py-1.5 text-[13px] text-ink placeholder-ink-3 outline-none transition-colors duration-150 focus:border-line-strong focus:bg-card"
+            />
+            <button
+              onClick={() => setPickerOpen((v) => !v)}
+              aria-expanded={pickerOpen}
+              aria-label="Filter sessions by project"
+              title="Filter by project"
+              className={`relative flex w-9 shrink-0 items-center justify-center rounded-lg border transition-colors duration-150 ${
+                projectFilter.size > 0
+                  ? 'border-line bg-brand-wash text-brand-text'
+                  : 'border-line bg-sunken text-ink-3 hover:border-line-strong hover:text-ink-2'
+              }`}
+            >
+              <svg viewBox="0 0 14 14" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+                <path
+                  d="M2 3h10L8.5 7.3v3.4l-3 1.8V7.3L2 3Z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              {projectFilter.size > 0 && (
+                <span className="num absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-medium text-white">
+                  {projectFilter.size}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {pickerOpen && (
+            <div className="pop-open absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-xl border border-line-strong bg-card shadow-[var(--shadow-lg)]">
+              <div className="flex items-baseline justify-between border-b border-line px-3 py-1.5">
+                <span className="eyebrow">Filter by project</span>
+                {projectFilter.size > 0 && (
+                  <button
+                    onClick={() => setProjectFilter(new Set())}
+                    className="shrink-0 text-[11px] text-ink-3 transition-colors duration-150 hover:text-ink"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto py-1">
+                {projects.map((p) => {
+                  const checked = projectFilter.has(p.path);
+                  return (
+                    <button
+                      key={p.path}
+                      onClick={() => toggleProject(p.path)}
+                      title={p.path}
+                      role="checkbox"
+                      aria-checked={checked}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors duration-150 hover:bg-sunken"
+                    >
+                      <span
+                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors duration-150 ${
+                          checked ? 'border-brand bg-brand text-white' : 'border-line-strong text-transparent'
+                        }`}
+                        aria-hidden="true"
+                      >
+                        <svg viewBox="0 0 12 12" fill="none" className="h-2.5 w-2.5">
+                          <path d="m2.5 6.5 2.5 2.5 4.5-5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      <span className={`min-w-0 flex-1 truncate text-[12px] ${checked ? 'text-ink' : 'text-ink-2'}`}>
+                        {p.name}
+                      </span>
+                      <span className="num shrink-0 text-[11px] text-ink-3">{p.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">

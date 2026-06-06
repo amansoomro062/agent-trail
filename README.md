@@ -67,8 +67,11 @@ skipped and everything else keeps working.
   headline number.
 - Live tail: while a session is still being written, the open session and the
   sidebar update in place over SSE, no refresh needed.
-- No config, no database, no accounts. Parses transcripts directly, streams
-  line by line, tolerates malformed data.
+- Custom sources: add your own transcript folders from the gear popover in
+  the top bar. They are remembered, scanned alongside the defaults, and
+  watched live like any built-in root. Removal only edits the config file.
+- No database, no accounts. Parses transcripts directly, streams line by
+  line, tolerates malformed data.
 
 ## How it works
 
@@ -80,6 +83,23 @@ each format with a per-provider reader, normalizes the events (`user` /
 `assistant` messages, tool calls, token usage where the provider records it)
 into one compact model, and serves it over a small local HTTP API to a React
 dashboard. Nothing leaves your machine.
+
+Extra transcript folders can be added from the dashboard (the gear in the top
+bar) or by hand in `~/.agenttrail/config.json` (`AGENTTRAIL_CONFIG` overrides
+the location):
+
+```json
+{
+  "roots": [
+    { "path": "/Volumes/backup/claude-transcripts", "provider": "auto", "label": "backup drive" }
+  ]
+}
+```
+
+`provider` is `claude`, `codex`, `cursor` or `auto` (sniff the layout). Each
+entry is deduplicated against the built-in roots, scanned at startup, and
+watched live like any other root. A missing or corrupt config file just means
+no extra roots.
 
 ## Privacy
 

@@ -10,10 +10,13 @@
 
 import * as path from 'node:path';
 import { exec } from 'node:child_process';
-import { defaultRoots, parseCorpusMulti, watchedRoots } from './corpus.js';
+import { defaultRoots, detectProvider, parseCorpusMulti, watchedRoots, type CorpusRoots } from './corpus.js';
 import { cursorSqliteAvailable } from './cursor.js';
+import { defaultConfigPath, loadConfig } from './config.js';
+import { expandHome, RootManager, type ResolvedCustomRoot } from './roots.js';
 import { defaultWebDist, startServer } from './server.js';
 import { TranscriptWatcher } from './watch.js';
+import * as fs from 'node:fs';
 
 interface CliOptions {
   /** Explicit Claude transcripts dir from --dir; null means scan defaults. */
@@ -78,6 +81,9 @@ Options:
   -p, --port <n>     port to serve on (default: ${DEFAULT_PORT}, falls back to a free port)
       --no-open      don't open the browser automatically
   -h, --help         show this help
+
+Custom roots from ~/.agenttrail/config.json (AGENTTRAIL_CONFIG override) are
+always merged in, with or without --dir.
 `);
 }
 
@@ -100,13 +106,36 @@ async function main(): Promise<void> {
     return;
   }
 
-  // --dir points at one Claude-layout transcripts dir; without it, scan the
-  // Claude, Codex and Cursor default roots, whichever exist on this machine.
-  const roots = opts.dir !== null ? { claude: opts.dir } : await defaultRoots();
+  // --dir points at one Claude-layout transcripts dir and overrides the
+  // default roots; custom roots from the config always merge on top.
+  const roots: CorpusRoots = opts.dir !== null ? { claude: opts.dir } : await defaultRoots();
   if (roots.cursor && !(await cursorSqliteAvailable())) {
     console.log('agenttrail: sqlite3 not found, skipping Cursor workspaces');
     delete roots.cursor;
   }
+
+  // custom roots from ~/.agenttrail/config.json (or AGENTTRAIL_CONFIG)
+  const config = await loadConfig();
+  const customRoots: ResolvedCustomRoot[] = [];
+  const builtinPaths = new Set(
+    [roots.claude, roots.codex, roots.cursor]
+      .filter((p): p is string => typeof p === 'string')
+      .map((p) => path.resolve(p)),
+  );
+  for (const c of config.roots) {
+    const resolved = path.resolve(expandHome(c.path));
+    if (builtinPaths.has(resolved) || customRoots.some((x) => x.path === resolved)) continue;
+    try {
+      if (!(await fs.promises.stat(resolved)).isDirectory()) throw new Error('not a directory');
+    } catch {
+      console.log(`agenttrail: skipping source ${c.path} (not a directory)`);
+      continue;
+    }
+    const provider = c.provider === 'auto' ? await detectProvider(resolved) : c.provider;
+    customRoots.push({ path: resolved, provider, ...(c.label ? { label: c.label } : {}) });
+    console.log(`agenttrail: added source ${resolved} (${provider})`);
+  }
+  roots.custom = customRoots;
 
   process.stderr.write('agenttrail: scanning transcripts …\n');
   const t0 = Date.now();
@@ -126,11 +155,25 @@ async function main(): Promise<void> {
     console.log('agenttrail: live tail unavailable on this platform, serving a static snapshot');
   }
 
+  const builtin = [
+    ...(roots.claude ? [{ path: path.resolve(roots.claude), provider: 'claude' as const }] : []),
+    ...(roots.codex ? [{ path: path.resolve(roots.codex), provider: 'codex' as const }] : []),
+    ...(roots.cursor ? [{ path: path.resolve(roots.cursor), provider: 'cursor' as const }] : []),
+  ];
+  const rootManager = new RootManager({
+    corpus,
+    watcher,
+    builtin,
+    custom: customRoots,
+    configFile: defaultConfigPath(),
+  });
+
   const server = await startServer({
     corpus,
     webDist: defaultWebDist(),
     port: opts.port,
     live: watcher,
+    roots: rootManager,
   });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : opts.port;

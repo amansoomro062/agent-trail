@@ -22,8 +22,8 @@ export interface SessionChange {
   sessionId: string;
   /** Transcript file that changed (absolute path). */
   file: string;
-  /** 'added' for a newly discovered session, 'updated' otherwise. */
-  kind: 'added' | 'updated';
+  /** 'added' for a newly discovered session, 'removed' when its root was dropped. */
+  kind: 'added' | 'updated' | 'removed';
 }
 
 export type ChangeListener = (change: SessionChange) => void;
@@ -88,13 +88,16 @@ export interface WatcherOptions {
 }
 
 export class TranscriptWatcher {
-  private watchers: fs.FSWatcher[] = [];
+  /** dir → active fs watcher. */
+  private watchers = new Map<string, fs.FSWatcher>();
+  private roots: WatchedRoot[];
   private listeners = new Set<ChangeListener>();
   private debouncer: Debouncer;
   /** Fingerprint per session id of the data currently in the corpus. */
   private fingerprints = new Map<string, string>();
 
   constructor(private readonly opts: WatcherOptions) {
+    this.roots = [...opts.roots];
     this.debouncer = new Debouncer(opts.debounceMs ?? 300);
     for (const s of opts.corpus.sessions) {
       this.fingerprints.set(s.id, summaryFingerprint(s));
@@ -103,7 +106,7 @@ export class TranscriptWatcher {
 
   /** True while at least one root is being watched. */
   get active(): boolean {
-    return this.watchers.length > 0;
+    return this.watchers.size > 0;
   }
 
   subscribe(fn: ChangeListener): () => void {
@@ -113,32 +116,78 @@ export class TranscriptWatcher {
     };
   }
 
-  start(): void {
-    if (this.watchers.length > 0) return;
-    for (const root of this.opts.roots) {
-      try {
-        const watcher = fs.watch(root.dir, { recursive: true }, (_event, filename) => {
-          if (typeof filename !== 'string') return;
-          const parts = filename.split(path.sep);
-          if (parts.length !== root.depth || !parts[parts.length - 1].endsWith(root.suffix)) return;
-          const file = path.join(root.dir, filename);
-          this.debouncer.schedule(file, () => void this.refresh(root, file));
-        });
-        watcher.on('error', () => {
-          watcher.close();
-          this.watchers = this.watchers.filter((w) => w !== watcher);
-        });
-        this.watchers.push(watcher);
-      } catch {
-        // recursive watch unsupported for this root: skip it, keep the rest
-      }
+  private arm(root: WatchedRoot): void {
+    if (this.watchers.has(root.dir)) return;
+    try {
+      const watcher = fs.watch(root.dir, { recursive: true }, (_event, filename) => {
+        if (typeof filename !== 'string') return;
+        const parts = filename.split(path.sep);
+        if (parts.length !== root.depth || !parts[parts.length - 1].endsWith(root.suffix)) return;
+        const file = path.join(root.dir, filename);
+        this.debouncer.schedule(file, () => void this.refresh(root, file));
+      });
+      watcher.on('error', () => {
+        watcher.close();
+        this.watchers.delete(root.dir);
+      });
+      this.watchers.set(root.dir, watcher);
+    } catch {
+      // recursive watch unsupported for this root: skip it, keep the rest
     }
   }
 
+  start(): void {
+    for (const root of this.roots) this.arm(root);
+  }
+
   stop(): void {
-    for (const w of this.watchers) w.close();
-    this.watchers = [];
+    for (const w of this.watchers.values()) w.close();
+    this.watchers.clear();
     this.debouncer.dispose();
+  }
+
+  /** Begin watching a root added at runtime (e.g. from the sources API). */
+  addRoot(root: WatchedRoot): void {
+    if (this.roots.some((r) => r.dir === root.dir)) return;
+    this.roots.push(root);
+    this.arm(root);
+  }
+
+  /** Stop watching a root removed at runtime. */
+  removeRoot(dir: string): void {
+    this.roots = this.roots.filter((r) => r.dir !== dir);
+    const watcher = this.watchers.get(dir);
+    if (watcher) {
+      watcher.close();
+      this.watchers.delete(dir);
+    }
+  }
+
+  /** Fold externally parsed sessions into the corpus and notify subscribers. */
+  ingest(parsed: Array<{ summary: SessionSummary; indexEntries: SearchIndexEntry[] }>): void {
+    for (const { summary, indexEntries } of parsed) {
+      this.fold(summary, indexEntries, summary.file);
+    }
+  }
+
+  /**
+   * Drop every session whose transcript lives under dir (root removal).
+   * Emits a 'removed' change per dropped session.
+   */
+  evict(dir: string): void {
+    const corpus = this.opts.corpus;
+    const prefix = dir.endsWith(path.sep) ? dir : dir + path.sep;
+    const removed = corpus.sessions.filter((s) => s.file === dir || s.file.startsWith(prefix));
+    if (removed.length === 0) return;
+    const removedIds = new Set(removed.map((s) => s.id));
+    corpus.sessions = corpus.sessions.filter((s) => !removedIds.has(s.id));
+    corpus.index = corpus.index.filter((e) => !removedIds.has(e.sessionId));
+    for (const s of removed) {
+      corpus.filesById.delete(s.id);
+      this.fingerprints.delete(s.id);
+      const change: SessionChange = { sessionId: s.id, file: s.file, kind: 'removed' };
+      for (const fn of this.listeners) fn(change);
+    }
   }
 
   /** Re-parse one changed file and fold its sessions into the corpus. */

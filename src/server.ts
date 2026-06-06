@@ -1,11 +1,14 @@
 /**
  * server.ts - zero-dependency HTTP server.
  *
- *   GET /api/sessions      → SessionSummary[]  (sorted by recency)
- *   GET /api/sessions/:id  → SessionDetail     (full message timeline)
- *   GET /api/search?q=...  → SearchHit[]       (case-insensitive substring)
- *   GET /api/events        → SSE stream        (session change notifications)
- *   everything else        → static files from web/dist (SPA fallback)
+ *   GET    /api/sessions      → SessionSummary[]  (sorted by recency)
+ *   GET    /api/sessions/:id  → SessionDetail     (full message timeline)
+ *   GET    /api/search?q=...  → SearchHit[]       (case-insensitive substring)
+ *   GET    /api/events        → SSE stream        (session change notifications)
+ *   GET    /api/roots         → RootInfo[]        (active transcript roots)
+ *   POST   /api/roots         → add a custom root {path, provider?, label?}
+ *   DELETE /api/roots         → remove a custom root {path}
+ *   everything else           → static files from web/dist (SPA fallback)
  */
 
 import * as http from 'node:http';
@@ -16,6 +19,7 @@ import type { Corpus } from './parser.js';
 import { parseSessionDetailFor } from './corpus.js';
 import type { SearchHit } from './types.js';
 import type { SessionChange } from './watch.js';
+import { RootError, type RootManager } from './roots.js';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -34,6 +38,37 @@ const MAX_SEARCH_RESULTS = 50;
 const SNIPPET_RADIUS = 120;
 /** default SSE keep-alive interval; browsers drop idle streams around 30-60s */
 const SSE_HEARTBEAT_MS = 25_000;
+/** request bodies are tiny (path + provider); cap them hard */
+const MAX_BODY_BYTES = 64 * 1024;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
+}
+
+/** Read a JSON request body, capped. Throws Error with a client-safe message. */
+function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new Error('request body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch {
+        reject(new Error('invalid JSON body'));
+      }
+    });
+    req.on('error', () => reject(new Error('failed to read request body')));
+  });
+}
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -101,6 +136,8 @@ export interface ServerOptions {
   host?: string;
   /** Live tail source; /api/events is served only when present. */
   live?: { subscribe(fn: (change: SessionChange) => void): () => void };
+  /** Source-path registry; /api/roots is served only when present. */
+  roots?: RootManager;
   /** SSE keep-alive interval in ms (tests shrink this). */
   sseHeartbeatMs?: number;
 }
@@ -170,6 +207,47 @@ export function startServer(opts: ServerOptions): Promise<http.Server> {
             clearInterval(heartbeat);
             unsubscribe();
           });
+          return;
+        }
+
+        if (pathname === '/api/roots') {
+          const manager = opts.roots;
+          if (!manager) {
+            sendJson(res, 404, { error: 'not found' });
+            return;
+          }
+          if (req.method === 'GET') {
+            sendJson(res, 200, { roots: manager.list() });
+            return;
+          }
+          if (req.method === 'POST' || req.method === 'DELETE') {
+            try {
+              const body = await readJsonBody(req);
+              if (!isRecord(body) || typeof body.path !== 'string') {
+                sendJson(res, 400, { error: 'path is required' });
+                return;
+              }
+              if (req.method === 'POST') {
+                const root = await manager.add(
+                  body.path,
+                  typeof body.provider === 'string' ? body.provider : undefined,
+                  typeof body.label === 'string' ? body.label : undefined,
+                );
+                sendJson(res, 201, { root });
+              } else {
+                const root = await manager.remove(body.path);
+                sendJson(res, 200, { removed: root });
+              }
+            } catch (err) {
+              if (err instanceof RootError) {
+                sendJson(res, err.status, { error: err.message });
+              } else {
+                sendJson(res, 400, { error: err instanceof Error ? err.message : 'invalid request' });
+              }
+            }
+            return;
+          }
+          sendJson(res, 405, { error: 'method not allowed' });
           return;
         }
 

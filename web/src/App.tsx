@@ -6,6 +6,7 @@ import SearchBar from './components/SearchBar';
 import HomeDashboard from './components/HomeDashboard';
 import ProjectDashboard from './components/ProjectDashboard';
 import SessionView from './components/SessionView';
+import SourcesPanel from './components/SourcesPanel';
 import ThemeSwitcher from './components/ThemeSwitcher';
 import TrailMark from './components/TrailMark';
 
@@ -105,7 +106,10 @@ export default function App() {
         <div className="flex flex-1 justify-center">
           <SearchBar onJump={openSession} />
         </div>
-        <ThemeSwitcher />
+        <div className="flex items-center gap-1.5">
+          <SourcesPanel />
+          <ThemeSwitcher />
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
